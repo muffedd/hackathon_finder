@@ -85,23 +85,57 @@ MIT
 
 We aim to become the **"Google Flights/Airbnb for Hackathons"**.
 
-### 📱 **Phase 2: Mobile App (The "HackFind App")**
-*   **Tech Stack**: **Flutter** (Cross-platform iOS/Android).
-*   **Core Feature**: "Magic Fill" – In-app browser with JS injection to auto-fill applications on external sites (Devpost, Unstop) using a stored user profile.
-*   **Engagement**: Push notifications (FCM) for "New AI Hackathons" and "Registration Closing Soon".
+### 📱 **Phase 2: Mobile App (Flutter)**
+*   **Core Feature**: "Magic Fill" – Auto-fill hackathon applications using stored profile.
+*   **Engagement**: Push notifications (FCM) for deadlines and new events.
 
 ### 🧠 **Phase 3: AI-Powered Search**
-*   **Semantic Search**: "Find me a hackathon about saving the ocean" -> Matches "BlueTech Challenge".
-*   **Tech**: **TiDB Serverless** (Vector Search) + **OpenAI Embeddings**.
-*   **Winning Probability Index**: Algorithm to calculate "Win Chance" based on `(Prize Pool / Participants)`.
+*   **Semantic Search**: Natural language queries for hackathons.
+*   **Winning Probability Index**: Calculate win chance based on prize/participants ratio.
 
-### ✈️ **Phase 4: Decision Intelligence Features**
-1.  **"Track Prices" -> "Track Deadlines"**: Watch specific events for updates.
-2.  **"Anywhere Search"**: "I'm free next weekend, show me remote hacks."
-3.  **Team Matchmaking**: "Tinder for Hackers" – Match frontend devs with backend engineers.
-4.  **Verified Organizers**: "Superhost" badges for organizers who pay out prizes reliably.
+### ✈️ **Phase 4: Decision Intelligence**
+*   **Track Deadlines**: Watch events for updates.
+*   **Team Matchmaking**: "Tinder for Hackers".
+*   **Verified Organizers**: Trust badges for reliable organizers.
 
 ### ⚙️ **Infrastructure Upgrades**
-- **Database**: Migrate SQLite to **TiDB Cloud** to support Mobile App + Web concurrent access.
-- **Backend**: Migrate Flask to **FastAPI** for async performance.
-- **Frontend**: Migrate Vanilla JS to **Next.js** for better SEO and UI components.
+- **Database**: SQLite → **TiDB Cloud**.
+- **Backend**: Flask → **FastAPI**.
+- **Frontend**: Vanilla JS → **Next.js**.
+
+---
+
+## 🚀 Product Vision: The Complete Hackathon Companion (V1.0)
+
+**One app to track the entire hackathon journey: Pre-Apply → Post-Results.**
+
+### The 5-Phase Lifecycle
+
+| Phase | Features |
+|-------|----------|
+| **🔍 DISCOVER** | Unified Feed, AI Search, Win Probability, Watchlist, Team Finder |
+| **📝 PREPARE** | "My Hacks" Dashboard, Team Chat, Resource Hub, Calendar Sync, Mentor Booking |
+| **⚡ EXECUTE** | Live Schedule, Task Board, Progress Tracker, Quick Notes |
+| **🚀 SUBMIT** | Auto-Reminder, Draft Saver, Link Validator, Demo Recorder |
+| **🏆 REFLECT** | Result Tracker, Hacker Stats, Retrospective Journal, Portfolio Export |
+
+### Key Friction Reducers
+
+| Problem | Solution |
+|---------|----------|
+| **Decision Paralysis** | AI Recommendations + Win Probability |
+| **Redirect Hell** | Magic Fill (auto-fill external forms) |
+| **Imposter Syndrome** | "Beginner Friendly" tags + testimonials |
+| **Team Anxiety** | Team Matchmaking |
+| **FOMO** | Smart Alerts & Notifications |
+| **Information Overload** | AI Search + Faceted Filters |
+
+### Why HackFind Wins
+
+> **Every feature asks: "Does this move the user closer to clicking 'Apply'?"**
+
+| Competitor | Gap HackFind Fills |
+|------------|---------------------|
+| Devpost | Only shows Devpost events. No lifecycle. |
+| Notion | Generic. No hackathon workflows. |
+| HackFind V1.0 | **Full lifecycle tracking.** |
