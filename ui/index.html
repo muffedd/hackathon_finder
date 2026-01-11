@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HackFind - Discover Hackathons Worldwide</title>
+    <meta name="description" content="Find and track hackathons from 17+ platforms. AI-powered search across MLH, Devpost, Devfolio, and more.">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <a href="/" class="logo">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-text">HackFind</span>
+            </a>
+            <nav class="nav">
+                <a href="#" class="nav-link active">Explore</a>
+                <a href="#" class="nav-link">Saved</a>
+                <a href="#" class="nav-link">About</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">Find Your Next <span class="gradient-text">Hackathon</span></h1>
+            <p class="hero-subtitle">AI-powered search across 17 platforms. Real-time updates from MLH, Devpost, Devfolio & more.</p>
+            
+            <!-- Search Bar -->
+            <div class="search-container">
+                <div class="search-box">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="m21 21-4.35-4.35"/>
+                    </svg>
+                    <input type="text" class="search-input" placeholder="Search hackathons... (e.g., 'AI hackathons in India')" id="searchInput">
+                    <button class="search-btn" id="searchBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Filter Bar -->
+    <section class="filters">
+        <div class="filters-content">
+            <div class="filter-pills">
+                <button class="filter-pill active" data-filter="all">All</button>
+                <button class="filter-pill" data-filter="upcoming">Upcoming</button>
+                <button class="filter-pill" data-filter="ongoing">Live Now</button>
+                <button class="filter-pill" data-filter="online">Online</button>
+                <button class="filter-pill" data-filter="in-person">In-Person</button>
+            </div>
+            
+            <div class="filter-actions">
+                <div class="sort-dropdown">
+                    <button class="sort-btn" id="sortBtn">
+                        <span>Sort: Latest</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="m6 9 6 6 6-6"/>
+                        </svg>
+                    </button>
+                    <div class="sort-menu" id="sortMenu">
+                        <button class="sort-option active" data-sort="latest">Latest</button>
+                        <button class="sort-option" data-sort="deadline">Deadline Soon</button>
+                        <button class="sort-option" data-sort="prize">Highest Prize</button>
+                        <button class="sort-option" data-sort="title">A-Z</button>
+                    </div>
+                </div>
+                
+                <span class="results-count" id="resultsCount">Loading...</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Bento Grid -->
+    <main class="bento-container">
+        <div class="bento-grid" id="bentoGrid">
+            <!-- Cards injected by JS -->
+        </div>
+        
+        <!-- Loading State -->
+        <div class="loading-state" id="loadingState">
+            <div class="skeleton-grid">
+                <div class="skeleton-card large"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card wide"></div>
+                <div class="skeleton-card"></div>
+            </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div class="empty-state hidden" id="emptyState">
+            <div class="empty-icon">🔍</div>
+            <h3>No hackathons found</h3>
+            <p>Try adjusting your filters or search terms</p>
+            <button class="btn-primary" onclick="resetFilters()">Clear Filters</button>
+        </div>
+    </main>
+
+    <!-- Pagination -->
+    <section class="pagination-container" id="paginationContainer">
+        <div class="pagination">
+            <button class="page-btn prev" id="prevBtn" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="m15 18-6-6 6-6"/>
+                </svg>
+            </button>
+            <div class="page-numbers" id="pageNumbers">
+                <!-- Page numbers injected by JS -->
+            </div>
+            <button class="page-btn next" id="nextBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="m9 18 6-6-6-6"/>
+                </svg>
+            </button>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-info">
+                <span class="footer-logo">⚡ HackFind</span>
+                <span class="footer-text">Aggregating hackathons from 17 platforms</span>
+            </div>
+            <div class="footer-sources">
+                <span class="source-badge">MLH</span>
+                <span class="source-badge">Devpost</span>
+                <span class="source-badge">Devfolio</span>
+                <span class="source-badge">+14 more</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>

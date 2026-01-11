@@ -1,0 +1,25 @@
+# HackFind - Hackathon Aggregator
+# Dependencies
+
+# Web scraping
+beautifulsoup4==4.14.3
+requests>=2.31.0
+lxml>=4.9.0
+
+# Browser automation (optional, for complex sites)
+playwright>=1.40.0
+
+# Database
+# sqlite3 is built into Python
+
+# AI Integration (Gemini)
+google-generativeai>=0.3.0
+
+# Utilities
+python-dateutil>=2.8.0
+
+# Web server (optional, for UI)
+flask>=3.0.0
+
+# Testing
+pytest>=7.0.0
