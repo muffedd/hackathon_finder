@@ -314,8 +314,15 @@ class DataNormalizer:
         if any(kw in explicit_mode for kw in ['in-person', 'in person', 'onsite']):
             return EventMode.IN_PERSON.value
         
-        # Analyze location and description (safely handle None)
+        # Extract location string from dict if needed
         location_str = location or ''
+        if isinstance(location, dict):
+            # Handle location dictionaries like {'icon': 'globe', 'location': 'Online'}
+            location_str = location.get('location', '') or location.get('name', '') or str(location)
+        elif not isinstance(location, str):
+            location_str = str(location)
+        
+        # Analyze location and description (safely handle None)
         description_str = raw_data.get('description') or ''
         text_to_check = f"{location_str} {description_str}".lower()
         
@@ -326,7 +333,11 @@ class DataNormalizer:
             return EventMode.HYBRID.value
         if has_online:
             return EventMode.ONLINE.value
-        if has_inperson or (location and location.lower() not in ['online', 'virtual', 'remote']):
+        if has_inperson:
+            return EventMode.IN_PERSON.value
+        
+        # If location exists and is not online-related, assume in-person
+        if location_str and location_str.lower() not in ['online', 'virtual', 'remote', 'tba', 'tbd', '']:
             return EventMode.IN_PERSON.value
         
         return EventMode.UNKNOWN.value
@@ -335,6 +346,7 @@ class DataNormalizer:
         """
         Normalize prize pool to standard format.
         Returns (display_string, numeric_value).
+        Preserves original currency symbols from source data.
         """
         if not prize:
             return None, 0.0
@@ -343,6 +355,21 @@ class DataNormalizer:
             prize = str(prize)
         
         prize = prize.strip()
+        
+        # Detect currency symbol from the original prize string
+        currency_symbol = "$"  # Default to USD
+        
+        # Check for common currency symbols
+        if "₹" in prize or "INR" in prize.upper() or "RS" in prize.upper():
+            currency_symbol = "₹"
+        elif "€" in prize or "EUR" in prize.upper():
+            currency_symbol = "€"
+        elif "£" in prize or "GBP" in prize.upper():
+            currency_symbol = "£"
+        elif "¥" in prize or "JPY" in prize.upper() or "CNY" in prize.upper():
+            currency_symbol = "¥"
+        elif "$" in prize or "USD" in prize.upper():
+            currency_symbol = "$"
         
         # Extract numeric value
         # Handle formats like "$10,000", "$10K", "10000 USD", "₹50,000"
@@ -362,13 +389,13 @@ class DataNormalizer:
         elif re.search(r'\dm\b', prize.lower()):
             value *= 1000000
         
-        # Format display string (always in USD for consistency)
+        # Format display string with detected currency
         if value >= 1000000:
-            display = f"${value/1000000:.1f}M"
+            display = f"{currency_symbol}{value/1000000:.1f}M"
         elif value >= 1000:
-            display = f"${value/1000:.0f}K"
+            display = f"{currency_symbol}{value/1000:.0f}K"
         else:
-            display = f"${value:.0f}"
+            display = f"{currency_symbol}{value:.0f}"
         
         return display, value
     

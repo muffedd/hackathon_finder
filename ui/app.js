@@ -102,6 +102,34 @@ function handleScroll() {
 }
 
 // === Filtering & Sorting ===
+function calculateStatus(hackathon) {
+    /**
+     * Calculate hackathon status based on current date (client-side)
+     * This ensures filters work correctly without database updates
+     */
+    if (!hackathon.start_date) {
+        return 'unknown';
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset to start of day for accurate comparison
+
+    try {
+        const startDate = new Date(hackathon.start_date);
+        const endDate = hackathon.end_date ? new Date(hackathon.end_date) : startDate;
+
+        if (today < startDate) {
+            return 'upcoming';
+        } else if (today >= startDate && today <= endDate) {
+            return 'ongoing';
+        } else {
+            return 'ended';
+        }
+    } catch (e) {
+        return 'unknown';
+    }
+}
+
 function applyFiltersAndSort() {
     let filtered = [...state.hackathons];
 
@@ -116,11 +144,26 @@ function applyFiltersAndSort() {
         );
     }
 
+    // Apply filters with client-side status calculation
     switch (state.currentFilter) {
-        case 'upcoming': filtered = filtered.filter(h => h.status === 'upcoming'); break;
-        case 'ongoing': filtered = filtered.filter(h => h.status === 'ongoing'); break;
-        case 'online': filtered = filtered.filter(h => h.mode === 'online'); break;
-        case 'in-person': filtered = filtered.filter(h => h.mode === 'in-person'); break;
+        case 'upcoming':
+            filtered = filtered.filter(h => calculateStatus(h) === 'upcoming');
+            break;
+        case 'ongoing':
+            filtered = filtered.filter(h => calculateStatus(h) === 'ongoing');
+            break;
+        case 'online':
+            filtered = filtered.filter(h => {
+                const mode = (h.mode || '').toLowerCase();
+                return mode === 'online' || mode.includes('online');
+            });
+            break;
+        case 'in-person':
+            filtered = filtered.filter(h => {
+                const mode = (h.mode || '').toLowerCase();
+                return mode === 'in-person' || mode.includes('in-person') || mode.includes('in person');
+            });
+            break;
     }
 
     switch (state.currentSort) {
@@ -145,7 +188,20 @@ function handleFilterChange(pill) {
     elements.filterPills.forEach(p => p.classList.remove('active'));
     pill.classList.add('active');
     state.currentFilter = pill.dataset.filter;
+
+    console.log(`Filter changed to: ${state.currentFilter}`);
+    console.log(`Total hackathons before filter: ${state.hackathons.length}`);
+
     applyFiltersAndSort();
+
+    console.log(`Filtered hackathons: ${state.filteredHackathons.length}`);
+    if (state.currentFilter === 'in-person') {
+        console.log('In-person filter samples:', state.filteredHackathons.slice(0, 5).map(h => ({
+            title: h.title,
+            mode: h.mode
+        })));
+    }
+
     renderHackathons();
 }
 
@@ -231,7 +287,7 @@ function renderLoadMore() {
         `;
     } else {
         container.style.display = state.displayedCount > 0 ? 'flex' : 'none';
-        container.innerHTML = state.displayedCount > 0 ? `<span class="all-loaded">✓ All ${state.displayedCount} hackathons loaded</span>` : '';
+        container.innerHTML = state.displayedCount > 0 ? `<span class="all-loaded">All ${state.displayedCount} hackathons loaded</span>` : '';
     }
 }
 
@@ -241,7 +297,7 @@ function loadMore() {
 
 function createCard(h) {
     const isBookmarked = state.bookmarks.has(h.id);
-    const date = formatDate(h.start_date);
+    const dateRange = formatDateRange(h.start_date, h.end_date);
     const location = getLocation(h.location);
 
     // Determine mode - if location is Online/Virtual/Remote, mode should be online
@@ -251,26 +307,28 @@ function createCard(h) {
         mode = 'online';
     }
 
-    const modeIcon = mode === 'online' ? '🌐' : mode === 'in-person' ? '📍' : '🔄';
+    // Prize is already formatted with correct currency from scraper
 
     return `
         <article class="bento-card" data-url="${h.url || '#'}">
             <div class="card-header">
                 <span class="source-badge">${h.source || 'Unknown'}</span>
-                <span class="mode-badge ${mode}">${modeIcon} ${capitalize(mode)}</span>
+                <div class="card-header-right">
+                    <span class="mode-badge ${mode}">${capitalize(mode)}</span>
+                    <button class="bookmark-btn ${isBookmarked ? 'active' : ''}" data-id="${h.id}">
+                        ${isBookmarked ? '★' : '☆'}
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <h3 class="card-title">${h.title || 'Untitled'}</h3>
                 <div class="card-meta">
-                    <span class="meta-item">📅 ${date}</span>
-                    <span class="meta-item">📍 ${location}</span>
+                    <span class="meta-item">${dateRange}</span>
+                    <span class="meta-item">${location}</span>
                 </div>
-                ${h.prize_pool ? `<div class="card-prize">💰 ${h.prize_pool}</div>` : ''}
+                ${h.prize_pool ? `<div class="card-prize">${h.prize_pool}</div>` : ''}
                 ${h.tags?.length ? `<div class="card-tags">${h.tags.slice(0, 3).map(t => `<span class="tag">${t}</span>`).join('')}</div>` : ''}
             </div>
-            <button class="bookmark-btn ${isBookmarked ? 'active' : ''}" data-id="${h.id}">
-                ${isBookmarked ? '★' : '☆'}
-            </button>
         </article>
     `;
 }
@@ -330,6 +388,38 @@ function formatDate(d) {
     try {
         return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     } catch { return 'TBA'; }
+}
+
+function formatDateRange(startDate, endDate) {
+    if (!startDate) return 'TBA';
+
+    const start = formatDate(startDate);
+
+    if (!endDate || endDate === startDate) {
+        return start;
+    }
+
+    const end = formatDate(endDate);
+    return `${start} - ${end}`;
+}
+
+function formatPrize(prizePool) {
+    if (!prizePool) return null;
+
+    const prizeStr = String(prizePool).trim();
+
+    // If it already has a currency symbol, return as is
+    if (/^[\$€£¥₹]/.test(prizeStr) || /USD|EUR|INR|GBP/.test(prizeStr)) {
+        return prizeStr;
+    }
+
+    // If it's just a number, add $ symbol
+    if (/^[\d,]+$/.test(prizeStr)) {
+        return `$${prizeStr}`;
+    }
+
+    // Otherwise return as is
+    return prizeStr;
 }
 
 function capitalize(s) {

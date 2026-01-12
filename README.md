@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.3.1-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-green" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
 </p>
@@ -18,6 +18,7 @@
 
 - [Features](#-features)
 - [Quick Start](#-quick-start)
+- [Changelog](#-changelog)
 - [Data Sources](#-data-sources)
 - [Project Structure](#-project-structure)
 - [Roadmap](#-roadmap)
@@ -35,6 +36,7 @@
 | 🤖 **Browser Automation** | Playwright-powered scraping for JS-heavy sites. |
 | 🔎 **Full-Text Search** | SQLite FTS5 for fast, fuzzy searching. |
 | 📊 **Normalized Data** | Consistent schema across all sources. |
+| 🧠 **AI Semantic Search** | ChromaDB + MiniLM for natural language queries. |
 
 ---
 
@@ -61,60 +63,32 @@ python server.py
 
 ---
 
-## � Data Sources
+## 📝 Changelog
 
-### ✅ Fully Operational
+### Version 0.3.1 (2026-01-12)
 
-| Source | Method | Count | Notes |
-|:-------|:------:|:-----:|:------|
-| Unstop | API | 400 | High volume, stable. |
-| Devpost | API | 200 | Regex date parsing. |
-| DevDisplay | Browser | 70 | Lazy-load handled. |
-| Devfolio | API | 45 | ISO/Epoch fallback. |
-| MLH | Scraper | 29 | Reliable. |
-| Superteam | API | 26 | Stable. |
+**UI Improvements**
+- Removed all emojis from dashboard for cleaner, professional appearance
+- Added date range display showing both start and end dates
+- Repositioned bookmark buttons to card headers for always-visible access
+- Enhanced mode badges with colored backgrounds
 
-### ⚠️ Working (Monitoring Required)
+**Filter Fixes**
+- Implemented client-side status calculation for upcoming/ongoing filters
+- Fixed mode filters to handle case variations and partial matches
+- Status now calculated dynamically based on current date (no database updates needed)
+- All filters now work with instant, client-side filtering
 
-| Source | Method | Count | Notes |
-|:-------|:------:|:-----:|:------|
-| DoraHacks | Browser | 24 | Playwright. |
-| MyCareerNet | Browser | 16 | Fixed selectors. |
-| TechGig | Browser | 13 | Date parsing fixed. |
-| HackQuest | Browser | 11 | Successful. |
-| GeeksforGeeks | Browser | 6 | Custom selectors. |
-| HackerEarth | Browser | 1 | Bot protection. |
+**Data Quality**
+- Fixed currency detection to preserve original symbols (₹, €, £, ¥, $) from source data
+- Fixed mode detection to properly handle location dictionaries
+- Corrected 119 misclassified events (online events marked as in-person)
+- Database migration to fix existing data inconsistencies
 
-### ❌ Broken (Needs Fix)
-
-| Source | Issue |
-|:-------|:------|
-| HackCulture | Site layout changed. |
-| Kaggle | API endpoint blocked. |
-| Contra | Empty response. |
-
----
-
-## 📁 Project Structure
-
-```
-hackfind/
-├── server.py           # Flask API server
-├── scrape_all.py       # Consolidated scraper (API + Browser)
-├── hackathons.db       # SQLite database
-├── ui/                 # Frontend (HTML/CSS/JS)
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js
-├── database/           # Database manager
-│   └── db_manager.py
-└── utils/              # Data normalization
-    └── data_normalizer.py
-```
-
----
-
-## 🗺️ Roadmap
+**Technical**
+- Mode detection now extracts location strings from dictionaries correctly
+- Currency normalization preserves source currency instead of forcing USD
+- Filter logic uses case-insensitive matching with partial string support
 
 ### Version 0.3: AI Search ✅ IMPLEMENTED
 | Feature | Tech Stack | Status |
