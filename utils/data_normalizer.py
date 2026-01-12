@@ -10,7 +10,7 @@ search, filter, and display data regardless of where it came from.
 import re
 import hashlib
 from datetime import datetime, date
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Tuple
 from dataclasses import dataclass, asdict, field
 from enum import Enum
 
@@ -202,12 +202,39 @@ class DataNormalizer:
             logo_url=raw_data.get('logo_url') or raw_data.get('logo'),
             organizer=raw_data.get('organizer'),
             participants_count=self._parse_int(raw_data.get('participants')),
-            team_size_min=self._parse_int(raw_data.get('team_size_min')),
-            team_size_max=self._parse_int(raw_data.get('team_size_max')),
+            team_size_min=self._parse_int(raw_data.get('team_size_min')) or self._parse_team_size(raw_data.get('team_size') or raw_data.get('team_size_max'))[0],
+            team_size_max=self._parse_int(raw_data.get('team_size_max')) or self._parse_team_size(raw_data.get('team_size') or raw_data.get('team_size_max'))[1],
             status=status,
             scraped_at=datetime.utcnow().isoformat(),
             last_updated=raw_data.get('last_updated'),
         )
+
+    def _parse_team_size(self, size_val: Any) -> Tuple[Optional[int], Optional[int]]:
+        """
+        Parse team size from integer or string.
+        Returns (min, max).
+        """
+        if not size_val:
+            return None, None
+            
+        # If it's already an int (likely max size)
+        if isinstance(size_val, (int, float)):
+            val = int(size_val)
+            return 1, val # Assume min 1 if only max given
+            
+        s = str(size_val).lower()
+        # "1-4", "1 - 4 members", "2 to 5"
+        nums = re.findall(r'\d+', s)
+        
+        if len(nums) >= 2:
+            return int(nums[0]), int(nums[1])
+        elif len(nums) == 1:
+            val = int(nums[0])
+            # If string says "up to 4", it's max. If "4 members", implies max?
+            # Safe bet: 1 to X
+            return 1, val
+            
+        return None, None
     
     def _generate_id(self, source: str, data: Dict) -> str:
         """

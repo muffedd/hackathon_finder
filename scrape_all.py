@@ -120,8 +120,20 @@ def scrape_devpost_details(event_url):
                         themes = data['keywords'] if isinstance(data['keywords'], list) else [data['keywords']]
             except:
                 pass
+                
+        # Scrape Team Size from Text (e.g. "Team Size: 1 - 4")
+        team_size = None
+        ts_text = soup.get_text()
+        ts_match = re.search(r'Team\s*Size:?\s*(\d+)(?:\s*[-–]\s*(\d+))?', ts_text, re.IGNORECASE)
+        if ts_match:
+            min_s = ts_match.group(1)
+            max_s = ts_match.group(2)
+            if max_s:
+                team_size = f"{min_s}-{max_s}"
+            else:
+                team_size = min_s
         
-        return {'description': description, 'tags': tags, 'themes': themes}
+        return {'description': description, 'tags': tags, 'themes': themes, 'team_size': team_size}
     except Exception as e:
         return None
 
@@ -169,37 +181,76 @@ def scrape_devfolio_details(event_slug):
     except Exception as e:
         return None
 
-def scrape_unstop_details(public_url):
-    """Scrape description from Unstop event page"""
+def fetch_unstop_details_api(event_id):
+    """
+    Fetch details for a single event ID from Unstop API.
+    Returns parsed dict or None.
+    """
     try:
-        # Build full URL if needed
-        if not public_url.startswith('http'):
-            public_url = f"https://unstop.com/{public_url}"
+        api_url = f"https://unstop.com/api/public/competition/{event_id}?round_lang=1"
+        r = requests.get(api_url, headers=headers, timeout=10)
         
-        r = requests.get(public_url, headers=headers, timeout=10)
         if r.status_code != 200:
             return None
         
-        soup = BeautifulSoup(r.text, 'html.parser')
+        data = r.json()
+        comp = data.get('data', {}).get('competition', {})
+        if not comp:
+             return None
+             
+        # Extract fields
+        reg_req = comp.get('regnRequirements', {})
         
-        # Unstop uses Angular, so look for prerendered content in meta tags
+        # Deadlines
+        reg_end_iso = reg_req.get('end_regn_dt')
+        reg_start_iso = reg_req.get('start_regn_dt')
+        
+        # Description
+        raw_desc = comp.get('details', '')
+        # Simple clean since we don't have the clean_html helper here, use BS4
         description = ""
+        if raw_desc:
+            soup = BeautifulSoup(raw_desc, 'html.parser')
+            description = soup.get_text(separator=' ', strip=True)[:3000]
+            
+        # Team Size
+        ts_min = None
+        ts_max = None
         
-        # Try meta description
-        meta_desc = soup.select_one('meta[name="description"]')
-        if meta_desc:
-            description = meta_desc.get('content', '')[:1000]
-        
-        # Try og:description
-        if not description:
-            og_desc = soup.select_one('meta[property="og:description"]')
-            if og_desc:
-                description = og_desc.get('content', '')[:1000]
+        if 'min_team_size' in reg_req:
+            ts_min = reg_req.get('min_team_size')
+        if 'max_team_size' in reg_req:
+            ts_max = reg_req.get('max_team_size')
+            
+        if ts_min is None or ts_max is None:
+            ts_str = reg_req.get('teamSize')
+            if ts_str:
+                parts = re.findall(r'\d+', str(ts_str))
+                if len(parts) >= 2:
+                    ts_min = int(parts[0])
+                    ts_max = int(parts[1])
+                elif len(parts) == 1:
+                    val = int(parts[0])
+                    ts_min = val
+                    ts_max = val
         
         # Extract tags from description
         tags = extract_tags_from_text(description)
         
-        return {'description': description, 'tags': tags, 'themes': []}
+        return {
+            'end_date': reg_end_iso, # Prefer reg end date
+            'reg_start': reg_start_iso,
+            'description': description,
+            'tags': tags,
+            'themes': [],
+            'team_size_min': ts_min,
+            'team_size_max': ts_max,
+            'team_size_max': ts_max,
+            'region': comp.get('region'),
+            'city': comp.get('address_with_country_logo', {}).get('city'),
+            'state': comp.get('address_with_country_logo', {}).get('state'),
+            'registerCount': comp.get('registerCount', 0)
+        }
     except Exception as e:
         return None
 
@@ -375,6 +426,9 @@ def scrape_devpost():
                 description = details.get('description', '')
                 tags = details.get('tags', [])
                 themes = details.get('themes', [])
+                # Prefer detail team size if found
+                if details.get('team_size'):
+                    h['team_size'] = details.get('team_size')
             else:
                 # Fallback to tagline
                 description = h.get('tagline', '')
@@ -466,6 +520,7 @@ def scrape_devfolio():
                     'prize': src.get('prize_amount'),
                     'mode': 'online' if src.get('is_online_event') else 'in-person',
                     'participants_count': src.get('participants_count'),
+                    'team_size_min': src.get('team_min'),
                     'team_size_max': src.get('team_size'),
                     'description': description,
                     'tags': tags,
@@ -579,13 +634,13 @@ def scrape_unstop():
         # 2. Prepare for parallel fetch
         to_fetch = []
         for h in all_events:
-            public_url = h.get('public_url', '')
-            if public_url:
-                full_url = f"https://unstop.com/{public_url}" if not public_url.startswith('http') else public_url
-                to_fetch.append({'id': full_url, 'url_or_id': full_url})
+            # Prefer ID for API lookup
+            eid = h.get('id')
+            if eid:
+                to_fetch.append({'id': str(eid), 'url_or_id': eid})
         
         # 3. Fetch details
-        details_map = fetch_details_parallel(to_fetch, scrape_unstop_details, max_workers=20)
+        details_map = fetch_details_parallel(to_fetch, fetch_unstop_details_api, max_workers=20)
         
         # 4. Save events with details
         for h in all_events:
@@ -630,21 +685,51 @@ def scrape_unstop():
                         prize = f"{currency}{total_cash:,}"
                 
                 # Get details
-                public_url = h.get('public_url', '')
-                full_url = f"https://unstop.com/{public_url}" if not public_url.startswith('http') else public_url
+                eid = str(h.get('id', ''))
+                details = details_map.get(eid)
                 
-                details = details_map.get(full_url)
+                description = ""
+                tags = []
+                themes = []
+                ts_min = None
+                ts_max = None
+                
                 if details:
                     description = details.get('description', '')
                     tags = details.get('tags', [])
                     themes = details.get('themes', [])
+                    ts_min = details.get('team_size_min')
+                    ts_max = details.get('team_size_max')
+                    # Prefer detailed dates
+                    if details.get('end_date'): end_date = parse_iso_timestamp(details.get('end_date'))
+                    
+                    # Mode & Location from details
+                    reg = details.get('region')
+                    if reg:
+                        if reg.lower() == 'online':
+                            mode = 'online'
+                            location = 'Online'
+                        elif reg.lower() == 'offline':
+                            mode = 'in-person'
+                            parts = [p for p in [details.get('city'), details.get('state')] if p]
+                            location = ", ".join(parts) if parts else "In-Person"
+                            
+                    # Participants
+                    if details.get('registerCount') is not None:
+                         # Prefer details count
+                         h['registerCount'] = details.get('registerCount')
+
                 else:
                     # Fallback
                     eligibility = h.get('eligibility', '')
                     description = eligibility[:500]
                     tags = extract_tags_from_text(description)
                     themes = []
+                    # Do NOT map 'show_team_size' here as it's often 0/1 boolean
                 
+                public_url = h.get('public_url', '')
+                full_url = f"https://unstop.com/{public_url}" if not public_url.startswith('http') else public_url
+
                 raw = {
                     'title': h.get('title'), 
                     'url': full_url,
@@ -654,7 +739,8 @@ def scrape_unstop():
                     'mode': mode,
                     'prize': prize,
                     'participants_count': h.get('registerCount'),
-                    'team_size_max': h.get('opportunity_config', {}).get('show_team_size') if isinstance(h.get('opportunity_config'), dict) else None,
+                    'team_size_min': ts_min,
+                    'team_size_max': ts_max,
                     'description': description,
                     'tags': tags,
                     'themes': themes

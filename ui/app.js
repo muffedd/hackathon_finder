@@ -14,14 +14,31 @@ let state = {
     hackathons: [],
     filteredHackathons: [],
     displayedCount: 0,
-    currentFilter: 'upcoming',  // Default to upcoming to hide ended events
+    currentFilter: 'all',  // Default to all
     currentSort: 'latest',
     searchQuery: '',
     isLoading: true,
     bookmarks: new Set(JSON.parse(localStorage.getItem('bookmarks') || '[]')),
-    selectedSources: new Set(JSON.parse(localStorage.getItem('selectedSources') || '[]')),
+    selectedSources: new Set(), // Will be filled in init
     allSources: []
 };
+
+// ... (lines 26-518 unchanged)
+
+function initializeSourceFilter() {
+    // Extract unique sources from hackathons
+    state.allSources = [...new Set(state.hackathons.map(h => h.source))].sort();
+
+    console.log('All sources:', state.allSources);
+
+    // Always default to ALL sources on refresh (remove local storage persistence for sources)
+    state.selectedSources = new Set(state.allSources);
+    console.log('Initialized with all sources');
+
+    // Generate checkboxes
+    renderSourceCheckboxes();
+    updateSourceCount();
+}
 
 const elements = {
     searchInput: document.getElementById('searchInput'),
@@ -382,17 +399,38 @@ function createCard(h) {
         })()}
         
         <div class="card-stats">
-            ${h.participants_count ? `
-                <div class="card-stat" title="Total Participants">
-                    <span class="stat-icon">👥</span>
-                    <span>${parseInt(h.participants_count).toLocaleString()}</span>
-                </div>
-            ` : ''}
+            ${(() => {
+            const count = parseInt(h.participants_count || 0);
+            const status = calculateStatus(h);
+
+            if (status === 'upcoming' && count === 0) {
+                return `
+                        <div class="card-stat" title="Registration Status">
+                            <span class="stat-icon">⏳</span>
+                            <span>Upcoming</span>
+                        </div>`;
+            }
+
+            if (count > 0) {
+                return `
+                        <div class="card-stat" title="Total Participants">
+                            <span class="stat-icon">👥</span>
+                            <span>${count.toLocaleString()}</span>
+                        </div>`;
+            }
+            return '';
+        })()}
             
-            ${h.team_size_max ? `
-                <div class="card-stat" title="Max Team Size">
+            ${(h.team_size_min || h.team_size_max) ? `
+                <div class="card-stat" title="Team Size">
                     <span class="stat-icon">👤</span>
-                    <span>${h.team_size_max == 1 ? 'Solo' : `Team of ${h.team_size_max}`}</span>
+                    <span>${(() => {
+                if (h.team_size_min && h.team_size_max) {
+                    return h.team_size_min === h.team_size_max ? (h.team_size_max === 1 ? 'Solo' : `Team: ${h.team_size_max}`) : `Team: ${h.team_size_min}-${h.team_size_max}`;
+                }
+                const size = h.team_size_max || h.team_size_min;
+                return size === 1 ? 'Solo' : `Team: ${size}`;
+            })()}</span>
                 </div>
             ` : ''}
         </div>

@@ -68,10 +68,41 @@ def fetch_details(event_id, event_url):
         raw_desc = comp.get('details', '')
         description = clean_html(raw_desc)[:3000] # Limit size
         
+        # Team Size
+        # API usually returns 'teamSize' (e.g. "1 - 4") or min/max fields
+        ts_min = None
+        ts_max = None
+        
+        # Try direct integer fields first
+        if 'min_team_size' in reg_req:
+            ts_min = reg_req.get('min_team_size')
+        if 'max_team_size' in reg_req:
+            ts_max = reg_req.get('max_team_size')
+            
+        # Try parsing string if ints missing
+        if ts_min is None or ts_max is None:
+            ts_str = reg_req.get('teamSize')
+            if ts_str:
+                # Expected formats: "1 - 4", "1-4", "4", "1 - 4 Members"
+                parts = re.findall(r'\d+', str(ts_str))
+                if len(parts) >= 2:
+                    ts_min = int(parts[0])
+                    ts_max = int(parts[1])
+                elif len(parts) == 1:
+                    val = int(parts[0])
+                    ts_min = val
+                    ts_max = val
+
         return {
             'end_date': end_date,
             'description': description,
-            'reg_start': reg_start_iso
+            'reg_start': reg_start_iso,
+            'team_size_min': ts_min,
+            'team_size_max': ts_max,
+            'region': comp.get('region'), # "online" or "offline"
+            'city': comp.get('address_with_country_logo', {}).get('city'),
+            'state': comp.get('address_with_country_logo', {}).get('state'),
+            'registerCount': comp.get('registerCount', 0)
         }
         
     except Exception as e:
@@ -103,7 +134,9 @@ def main():
     success_count = 0
     fail_count = 0
     
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    print(f"Processing {len(to_process)} events with 5 workers...")
+    
+    with ThreadPoolExecutor(max_workers=5) as executor:
         future_map = {executor.submit(fetch_details, item['api_id'], item['db_event'].url): item for item in to_process}
         
         for future in as_completed(future_map):
@@ -123,18 +156,44 @@ def main():
                     if res['end_date']:
                         e.end_date = res['end_date'] # Override with Reg Deadline
                         updated = True
+
+                    if res.get('team_size_min') is not None:
+                        e.team_size_min = res['team_size_min']
+                        updated = True
+                    
+                    if res.get('team_size_max') is not None:
+                        e.team_size_max = res['team_size_max']
+                        updated = True
+                        
+                    # Mode & Location
+                    reg = res.get('region')
+                    if reg:
+                        if reg.lower() == 'online':
+                            e.mode = 'online'
+                            e.location = 'Online'
+                        elif reg.lower() == 'offline':
+                            e.mode = 'in-person'
+                            parts = [p for p in [res.get('city'), res.get('state')] if p]
+                            e.location = ", ".join(parts) if parts else "In-Person"
+                        updated = True
+                        
+                    # Participants
+                    if res.get('registerCount') is not None:
+                         e.participants_count = res['registerCount']
+                         updated = True
                     
                     if updated:
                         db.save_event(e)
                         success_count += 1
-                        print(f"  ✓ {e.title[:20]}... (Date: {res['end_date']})")
+                        ts_display = f" (Team: {e.team_size_min}-{e.team_size_max})" if e.team_size_max else ""
+                        print(f"  ✓ {e.title[:20]}... (Date: {res['end_date']}){ts_display}")
                     else:
                         fail_count += 1
                 else:
-                    print(f"  ❌ No Data for {item['api_id']}")
+                    print(f"  ❌ No Data for {item['api_id']} (Status != 200 or No Comp Data)")
                     fail_count += 1
             except Exception as e:
-                print(f"  Example Error: {e}")
+                print(f"  ❌ Error processing {item['api_id']}: {e}")
                 fail_count += 1
 
     print("="*40)

@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.4.1-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-green" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
 </p>
@@ -64,6 +64,19 @@ python server.py
 ---
 
 ## 📝 Changelog
+
+### Version 0.4.1 (2026-01-13)
+
+**Unstop Data Accuracy**
+- 🌍 **Mode Detection**: robust hybrid/online/offline detection using API region data.
+- 👥 **Real-time Participants**: Fetches live registration counts (`registerCount`).
+- 📅 **Date Precision**: Correctly prioritizes Registration Deadline over Event End Date.
+- 🔢 **Team Size**: Accurate parsing of team allocations (e.g., "1-4 Members", "Solo").
+
+**Frontend Enhancements**
+- ⏳ **Smart Status**: displays "Upcoming" icon for events with 0 participants.
+- 👥 **Participant Counts**: Shows live participant numbers for ongoing events.
+- 🧹 **Clean Defaults**: "All Sources" and "All Statuses" selected by default on refresh.
 
 ### Version 0.4.0 (2026-01-13)
 
