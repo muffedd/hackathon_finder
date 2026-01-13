@@ -1,23 +1,31 @@
 """
-HackFind Server
-===============
-Flask server with API for hackathon data.
+HackFind Server (FastAPI)
+=========================
+FastAPI server with API for hackathon data.
+Auto-generated Swagger docs at /docs
 """
 import os
 import sys
-import threading
-import time
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, send_file, jsonify, request
+from typing import Optional
+
+from fastapi import FastAPI, Query
+from fastapi.responses import FileResponse, JSONResponse
+import uvicorn
 
 BASE_DIR = Path(__file__).parent.absolute()
 UI_DIR = BASE_DIR / 'ui'
 sys.path.insert(0, str(BASE_DIR))
 
-app = Flask(__name__)
+app = FastAPI(
+    title="HackFind API",
+    description="Hackathon Aggregator API with semantic search",
+    version="2.0.0"
+)
 
 db = None
+
 
 def get_db():
     global db
@@ -25,6 +33,7 @@ def get_db():
         from database.db_manager import DatabaseManager
         db = DatabaseManager(str(BASE_DIR / "hackathons.db"))
     return db
+
 
 def recalculate_status(event_dict):
     """Recalculate status based on current date (not scrape date)."""
@@ -66,28 +75,33 @@ def recalculate_status(event_dict):
     
     return event_dict
 
+
 # === Serve UI ===
-@app.route('/')
-def home():
-    return send_file(str(UI_DIR / 'index.html'))
+@app.get("/", include_in_schema=False)
+async def home():
+    return FileResponse(str(UI_DIR / 'index.html'))
 
-@app.route('/styles.css')
-def styles():
-    return send_file(str(UI_DIR / 'styles.css'), mimetype='text/css')
 
-@app.route('/app.js')
-def appjs():
-    return send_file(str(UI_DIR / 'app.js'), mimetype='application/javascript')
+@app.get("/styles.css", include_in_schema=False)
+async def styles():
+    return FileResponse(str(UI_DIR / 'styles.css'), media_type='text/css')
+
+
+@app.get("/app.js", include_in_schema=False)
+async def appjs():
+    return FileResponse(str(UI_DIR / 'app.js'), media_type='application/javascript')
+
 
 # === API ===
-@app.route('/api/hackathons')
-def api_hackathons():
-    """Get ALL hackathons from database"""
+@app.get("/api/hackathons", tags=["Hackathons"])
+async def api_hackathons(
+    search: str = Query(default="", description="Search query for title/description"),
+    mode: str = Query(default="", description="Filter by mode (online, in-person)"),
+    location: str = Query(default="", description="Filter by location")
+):
+    """Get ALL hackathons from database with optional filters."""
     try:
         database = get_db()
-        search = request.args.get('search', '')
-        mode = request.args.get('mode', '')
-        location = request.args.get('location', '')
 
         # Get ALL events - use large page_size to get everything
         events, total = database.query_events(
@@ -108,19 +122,25 @@ def api_hackathons():
         
         # Recalculate status dynamically based on current date
         result = [recalculate_status(e.to_dict()) for e in events]
-        return jsonify(result)
+        return result
     except Exception as e:
         print(f"API Error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify([])
+        return []
 
-@app.route('/api/search/ai')
-def ai_search():
-    """Semantic search using AI embeddings."""
-    query = request.args.get('q', '').strip()
+
+@app.get("/api/search/ai", tags=["Search"])
+async def ai_search(
+    q: str = Query(default="", description="Search query for semantic search")
+):
+    """Semantic search using AI embeddings (hybrid: vector + keyword)."""
+    query = q.strip()
     if not query:
-        return jsonify({"error": "Missing query parameter 'q'"}), 400
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Missing query parameter 'q'"}
+        )
     
     # Limit query length for performance
     if len(query) > 500:
@@ -133,12 +153,18 @@ def ai_search():
         # Check if vector store has data
         count = get_collection_count()
         if count == 0:
-            return jsonify({"error": "Vector store is empty. Run vectorize_events.py first."}), 503
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Vector store is empty. Run vectorize_events.py first."}
+            )
         
         # Generate embedding for query (cached via lru_cache)
         query_embedding = generate_embedding(query)
         if not query_embedding:
-            return jsonify({"error": "Failed to generate embedding"}), 500
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Failed to generate embedding"}
+            )
         
         # 1. Vector Search (Semantic)
         vector_results = search_similar(query_embedding, top_k=20)
@@ -153,33 +179,30 @@ def ai_search():
         # Process Vector Results
         for r in vector_results:
             rank_map[r['id']] = {
-                'event': None, # Will fetch later to save DB hits? Actually db.get_event is fast
+                'event': None,
                 'id': r['id'],
                 'score': r['score'],
                 'matches': ['semantic']
             }
             
         # Process Keyword Results
-        keyword_base_score = 0.4 # Baseline for keyword-only match
-        keyword_boost = 0.2 # Boost if it also matches vector
+        keyword_base_score = 0.4
+        keyword_boost = 0.2
         
         for ke in keyword_events:
-             # Convert DB event to dict immediately
-             k_dict = recalculate_status(ke.to_dict())
+            k_dict = recalculate_status(ke.to_dict())
              
-             if ke.id in rank_map:
-                 # It's in both! Boost it.
-                 rank_map[ke.id]['score'] += keyword_boost
-                 rank_map[ke.id]['matches'].append('keyword')
-                 rank_map[ke.id]['event_dict'] = k_dict # Prefer object we already have
-             else:
-                 # Keyword only
-                 rank_map[ke.id] = {
-                     'event_dict': k_dict,
-                     'id': ke.id,
-                     'score': keyword_base_score,
-                     'matches': ['keyword']
-                 }
+            if ke.id in rank_map:
+                rank_map[ke.id]['score'] += keyword_boost
+                rank_map[ke.id]['matches'].append('keyword')
+                rank_map[ke.id]['event_dict'] = k_dict
+            else:
+                rank_map[ke.id] = {
+                    'event_dict': k_dict,
+                    'id': ke.id,
+                    'score': keyword_base_score,
+                    'matches': ['keyword']
+                }
                  
         # Fetch missing vector event objects
         for vid, item in rank_map.items():
@@ -196,40 +219,52 @@ def ai_search():
             if item['event_dict']:
                 ed = item['event_dict']
                 ed['similarity_score'] = round(item['score'], 4)
-                ed['match_types'] = item['matches'] # debug info
+                ed['match_types'] = item['matches']
                 final_list.append(ed)
                 
         # Sort by score descending
         final_list.sort(key=lambda x: x['similarity_score'], reverse=True)
         
-        enriched = final_list[:30] # Return top 30 mixed
+        enriched = final_list[:30]
         
         print(f"AI Search (Hybrid): '{query[:50]}...' -> {len(enriched)} results")
-        return jsonify(enriched)
+        return enriched
         
     except ImportError as e:
-        return jsonify({"error": f"AI dependencies not installed: {e}"}), 503
+        return JSONResponse(
+            status_code=503,
+            content={"error": f"AI dependencies not installed: {e}"}
+        )
     except Exception as e:
         print(f"AI Search Error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
 
-@app.route('/api/stats')
-def api_stats():
-    """Get database stats"""
+
+@app.get("/api/stats", tags=["Stats"])
+async def api_stats():
+    """Get database statistics."""
     try:
         database = get_db()
-        return jsonify(database.get_statistics())
+        return database.get_statistics()
     except Exception as e:
-        return jsonify({'error': str(e)})
+        return JSONResponse(
+            status_code=500,
+            content={'error': str(e)}
+        )
+
 
 if __name__ == '__main__':
     print(f"\n{'='*50}")
-    print(f"  HackFind Server")
+    print(f"  HackFind Server (FastAPI)")
     print(f"  Port: 8000")
     print(f"  UI: {UI_DIR}")
     print(f"{'='*50}")
     print(f"  Open: http://localhost:8000")
+    print(f"  API Docs: http://localhost:8000/docs")
     print(f"{'='*50}\n")
-    app.run(port=8001, debug=False, host='127.0.0.1')
+    uvicorn.run("server:app", host='127.0.0.1', port=8000, reload=True)

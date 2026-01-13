@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.1-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.4.2-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-green" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
 </p>
@@ -58,12 +58,26 @@ python scrape_all.py
 python server.py
 
 # 5. Open in browser
-# → http://localhost:8001
+# → http://localhost:8000
+# → API Docs: http://localhost:8000/docs
 ```
 
 ---
 
 ## 📝 Changelog
+
+### Version 0.4.2 (2026-01-13)
+
+**Framework Migration**
+- 🚀 **Flask → FastAPI**: Migrated entire backend from Flask to FastAPI.
+- 📚 **Swagger Docs**: Auto-generated API documentation at `/docs`.
+- ⚡ **ASGI Server**: Now using Uvicorn for better async performance.
+- 🔄 **Zero Breaking Changes**: All API endpoints maintain backward compatibility.
+
+**Technical**
+- Updated `requirements.txt`: Replaced `flask>=3.0.0` with `fastapi>=0.115.0` + `uvicorn[standard]>=0.32.0`
+- Server now runs on port `8000` (was `8001`)
+- All routes migrated: `/`, `/styles.css`, `/app.js`, `/api/hackathons`, `/api/search/ai`, `/api/stats`
 
 ### Version 0.4.1 (2026-01-13)
 
@@ -184,7 +198,7 @@ python server.py
 | Current | Target |
 |---------|--------|
 | SQLite | TiDB Cloud |
-| Flask | FastAPI |
+| Flask | FastAPI ✅ |
 | Vanilla JS | Next.js |
 
 ---
