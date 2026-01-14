@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.3-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.5.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-green" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
 </p>
@@ -65,6 +65,18 @@ python server.py
 ---
 
 ## 📝 Changelog
+
+### Version 0.5.0 (2026-01-14)
+
+**MLH & Data Accuracy**
+- 🏆 **MLH Scraper Overhaul**: Rewrote scraper to support new MLH Tailwind structure. Auto-extracts dates, locations, and modes correctly.
+- ⚡ **Deep Enrichment**: Automatically fetches Prize pools, Participant counts, and localized details for MLH events via Devpost/Devfolio integrations.
+- ✅ **Fixed Kaggle**: Resolved title truncation issues and improved data extraction.
+
+**UI Improvements**
+- 🖼️ **Source Logos**: Added real platform favicons (Devpost, MLH, etc.) to event cards.
+- 🧹 **Clean Interface**: Hide redundant "Location" text when mode is Online.
+- 🔢 **Sorted by Value**: Default sort order changed to "Highest Prize".
 
 ### Version 0.4.3 (2026-01-14)
 

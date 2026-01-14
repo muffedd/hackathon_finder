@@ -15,7 +15,7 @@ let state = {
     filteredHackathons: [],
     displayedCount: 0,
     currentFilter: 'all',  // Default to all
-    currentSort: 'latest',
+    currentSort: 'prize',
     searchQuery: '',
     isLoading: true,
     bookmarks: new Set(JSON.parse(localStorage.getItem('bookmarks') || '[]')),
@@ -350,6 +350,10 @@ function createCard(h) {
         mode = 'online';
     }
 
+    // Hide location if it's redundant (e.g. "Online" mode and location "Online")
+    const isLocationRedundant = mode === 'online' &&
+        ['online', 'virtual', 'remote'].includes(location.toLowerCase());
+
     // Parse date for calendar badge
     const dateObj = h.end_date ? new Date(h.end_date) : null;
     const month = dateObj ? dateObj.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : 'TBA';
@@ -403,15 +407,24 @@ function createCard(h) {
     };
 
     // Get source initial
-    const getSourceInitial = (source) => {
+    // Get source logo
+    const renderSourceIcon = (source) => {
         if (!source) return '?';
-        const initials = {
-            'Devpost': 'D', 'Devfolio': 'Df', 'Unstop': 'U', 'MLH': 'M',
-            'DoraHacks': 'DH', 'Kaggle': 'K', 'HackerEarth': 'HE', 'GeeksforGeeks': 'GfG',
-            'TechGig': 'TG', 'Superteam': 'ST', 'HackQuest': 'HQ', 'DevDisplay': 'DD',
-            'HackCulture': 'HC', 'MyCareerNet': 'MC'
+        const domains = {
+            'Devpost': 'devpost.com', 'Devfolio': 'devfolio.co', 'Unstop': 'unstop.com',
+            'MLH': 'mlh.io', 'DoraHacks': 'dorahacks.io', 'Kaggle': 'kaggle.com',
+            'HackerEarth': 'hackerearth.com', 'Superteam': 'superteam.fun',
+            'HackQuest': 'hackquest.io', 'DevDisplay': 'devdisplay.org',
+            'HackCulture': 'hackculture.com', 'MyCareerNet': 'mycareernet.in',
+            'Lisk': 'lisk.com', 'ETHGlobal': 'ethglobal.com', 'Taikai': 'taikai.network',
+            'Hack2Skill': 'hack2skill.com'
         };
-        return initials[source] || source.charAt(0).toUpperCase();
+
+        const domain = domains[source];
+        if (domain) {
+            return `<img src="https://www.google.com/s2/favicons?domain=${domain}&sz=64" alt="${source}" onerror="this.outerHTML='${source.charAt(0)}'">`;
+        }
+        return source.charAt(0).toUpperCase();
     };
 
     return `
@@ -424,7 +437,7 @@ function createCard(h) {
 
             <!-- Source Icon -->
             <div class="bento-source-icon" title="${h.source || 'Unknown'}">
-                ${getSourceInitial(h.source)}
+                ${renderSourceIcon(h.source)}
             </div>
 
             <!-- Content -->
@@ -433,7 +446,7 @@ function createCard(h) {
                 
                 <div class="bento-mode-row">
                     <span class="bento-mode ${mode}">${formatMode(mode)}</span>
-                    <span class="bento-location">${location}</span>
+                    ${!isLocationRedundant ? `<span class="bento-location">${location}</span>` : ''}
                 </div>
 
                 <div class="bento-prize ${prizeInfo.class}">${prizeInfo.text}</div>

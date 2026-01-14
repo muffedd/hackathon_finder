@@ -121,17 +121,49 @@ def scrape_devpost_details(event_url):
             except:
                 pass
                 
-        # Scrape Team Size from Text (e.g. "Team Size: 1 - 4")
+        # Scrape Team Size from Text
         team_size = None
         ts_text = soup.get_text()
         ts_match = re.search(r'Team\s*Size:?\s*(\d+)(?:\s*[-–]\s*(\d+))?', ts_text, re.IGNORECASE)
         if ts_match:
             min_s = ts_match.group(1)
             max_s = ts_match.group(2)
-            if max_s:
-                team_size = f"{min_s}-{max_s}"
-            else:
-                team_size = min_s
+            team_size = f"{min_s}-{max_s}" if max_s else min_s
+
+        # Scrape Participants count
+        participants = None
+        p_match = re.search(r'([\d,]+)\s+registered', ts_text, re.IGNORECASE)
+        if p_match:
+            participants = int(p_match.group(1).replace(',', ''))
+
+        # Scrape Prize (Total)
+        prize = None
+        prize_match = re.search(r'([\$\£\€][\d,]+)', ts_text)
+        if prize_match and 'prize' in ts_text.lower():
+             prize = prize_match.group(1)
+
+        # Scrape Location/Mode
+        location = None
+        mode = None
+        
+        # Check metadata sidebar or header
+        if 'online' in ts_text.lower() or 'virtual' in ts_text.lower():
+             mode = 'online'
+             if not location: location = 'Online'
+        
+        # Try to find date meta tags if available, otherwise rely on text
+        # (Dates are usually parsed from listing, but detail page helps if listing failed)
+        
+        return {
+            'description': description, 
+            'tags': tags, 
+            'themes': themes, 
+            'team_size_max': team_size, # Map to 'team_size_max' key preferred by normalizer?
+            'participants_count': participants,
+            'prize': prize,
+            'location': location,
+            'mode': mode
+        }
         
         return {'description': description, 'tags': tags, 'themes': themes, 'team_size': team_size}
     except Exception as e:
@@ -456,10 +488,10 @@ def scrape_devpost():
     return saved
 
 def scrape_devfolio():
-    print('\n🎯 Devfolio...')
+    print('\n🎯 Devfolio (API-Enhanced)...')
     saved = 0
     try:
-        # 1. Collect all events first
+        # 1. Collect all events first via search API
         all_events = []
         for list_type in ['application_open', 'all']:
             try:
@@ -477,58 +509,76 @@ def scrape_devfolio():
             if slug: unique_events[slug] = src
         
         total_events = list(unique_events.values())
-        print(f'  Found {len(total_events)} events. Fetching details in parallel...')
+        print(f'  Found {len(total_events)} events. Fetching details via API...')
         
-        # 2. Prepare for parallel fetch
-        to_fetch = []
-        for src in total_events:
-            if src.get('slug'):
-                to_fetch.append({'id': src.get('slug'), 'url_or_id': src.get('slug')})
-        
-        # 3. Fetch details
-        details_map = fetch_details_parallel(to_fetch, scrape_devfolio_details, max_workers=20)
-        
-        # 4. Save events with details
-        for src in total_events:
+        # 2. Fetch details via API for each hackathon
+        for i, src in enumerate(total_events):
             try:
-                s_at, e_at = src.get('starts_at'), src.get('ends_at')
+                slug = src.get('slug')
+                if not slug:
+                    continue
                 
-                start_date = parse_epoch(s_at)
-                if not start_date and isinstance(s_at, str): start_date = parse_iso_timestamp(s_at)
-                end_date = parse_epoch(e_at)
-                if not end_date and isinstance(e_at, str): end_date = parse_iso_timestamp(e_at)
+                # Fetch detailed data via API
+                details = fetch_devfolio_details_api(slug)
                 
-                # Get details
-                details = details_map.get(src.get('slug'))
                 if details:
+                    # Use API data (priority)
+                    start_date = details.get('start_date')
+                    end_date = details.get('end_date')  # This is registration end date
+                    prize = details.get('prize', 'Prize TBD')
+                    team_size_min = details.get('team_size_min')
+                    team_size_max = details.get('team_size_max')
+                    mode = details.get('mode', 'online')
+                    location = details.get('location', 'Online')
+                    participants_count = details.get('participants_count')
                     description = details.get('description', '')
-                    tags = details.get('tags', [])
-                    themes = details.get('themes', [])
                 else:
-                    # Fallback
+                    # Fallback to search API data
+                    s_at, e_at = src.get('starts_at'), src.get('ends_at')
+                    start_date = parse_epoch(s_at) if isinstance(s_at, (int, float)) else parse_iso_timestamp(s_at)
+                    end_date = parse_epoch(e_at) if isinstance(e_at, (int, float)) else parse_iso_timestamp(e_at)
+                    prize = src.get('prize_amount') or 'Prize TBD'
+                    team_size_min = src.get('team_min')
+                    team_size_max = src.get('team_size')
+                    mode = 'online' if src.get('is_online_event') else 'in-person'
+                    location = src.get('location') or ('Online' if src.get('is_online_event') else '')
+                    participants_count = src.get('participants_count')
                     tagline = src.get('tagline', '')
                     desc = src.get('desc', '')
                     description = f"{tagline}. {desc}"[:500]
-                    tags = extract_tags_from_text(description)
-                    themes = src.get('themes', [])
+                
+                # Extract tags from description
+                tags = extract_tags_from_text(description)
+                themes = src.get('themes', [])
                 
                 raw = {
                     'title': src.get('name'),
-                    'url': f"https://{src.get('slug')}.devfolio.co/" if src.get('slug') else None,
-                    'start_date': start_date, 'end_date': end_date,
-                    'location': src.get('location') or ('Online' if src.get('is_online_event') else ''),
-                    'prize': src.get('prize_amount'),
-                    'mode': 'online' if src.get('is_online_event') else 'in-person',
-                    'participants_count': src.get('participants_count'),
-                    'team_size_min': src.get('team_min'),
-                    'team_size_max': src.get('team_size'),
+                    'url': f"https://{slug}.devfolio.co/",
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'location': location,
+                    'prize': prize,
+                    'mode': mode,
+                    'participants_count': participants_count,
+                    'team_size_min': team_size_min,
+                    'team_size_max': team_size_max,
                     'description': description,
                     'tags': tags,
                     'themes': themes
                 }
-                if raw['title'] and raw['url']: db.save_event(normalizer.normalize(raw, 'Devfolio')); saved += 1
-            except: pass
-    except: pass
+                if raw['title'] and raw['url']:
+                    db.save_event(normalizer.normalize(raw, 'Devfolio'))
+                    saved += 1
+                    
+                # Progress indicator
+                if (i + 1) % 20 == 0:
+                    print(f'    Processed {i + 1}/{len(total_events)}...')
+                    
+            except Exception as e:
+                pass
+                
+    except Exception as e:
+        print(f'  Error: {e}')
     print(f'  ✓ {saved}')
     return saved
 
@@ -759,25 +809,157 @@ def scrape_mlh():
     saved = 0
     try:
         from bs4 import BeautifulSoup
+        import concurrent.futures
+        
+        events_to_process = []
+        
+        # 1. Scrape Listing
         for year in ['2025', '2026']:
             r = safe_get(f'https://mlh.io/seasons/{year}/events')
-            if r:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                for link in soup.find_all('a', href=True):
-                    if '/events/' not in link['href']: continue
+            if not r: continue
+            
+            soup = BeautifulSoup(r.text, 'html.parser')
+            for link in soup.find_all('a', href=True):
+                href = link['href']
+                
+                # Filter: Allow external links OR useful MLH subdomains
+                # Exclude simple nav links like /, /login, /about, /seasons
+                if href in ['/', '#'] or '/seasons' in href or '/signin' in href or '/oauth' in href:
+                    continue
+                if 'http' not in href:
+                    if href.startswith('/'): href = f'https://mlh.io{href}'
+                
+                # Validation: Link must have some text content
+                text_blob = link.get_text(" | ", strip=True) 
+                if len(text_blob) < 5: continue
+                
+                # Heuristics extraction
+                # Title: Try H3, else first chunk
+                title = "Unknown MLH Event"
+                h3 = link.find('h3')
+                if h3:
+                    title = h3.get_text(strip=True)
+                else:
+                    title = text_blob.split('|')[0].strip()
+                    
+                # Date Regex (Robust)
+                # Matches: "May 5", "May 5th", "May 5 - 7", "May 5 - May 7"
+                date_match = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*[-–]\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+)?(\d{1,2}))?', text_blob, re.IGNORECASE)
+                
+                start_date = None
+                end_date = None
+                if date_match:
                     try:
-                        text = link.get_text(strip=True)
-                        # Extract date: "Event NameJAN 09"
-                        m = re.search(r'([A-Z]{3})\s*(\d{1,2})', text)
-                        start = None
-                        name = text
-                        if m:
-                            name = text.split(m.group(0))[0].strip()
-                        raw = {'title': name, 'url': link['href'], 'mode': 'in-person'}
-                        if not raw['url'].startswith('http'): raw['url'] = 'https://mlh.io' + raw['url']
-                        db.save_event(normalizer.normalize(raw, 'MLH')); saved += 1
+                        month = date_match.group(1)
+                        day = date_match.group(2)
+                        year_val = year
+                        # Construct ISO date (simple logic)
+                        from datetime import datetime
+                        # Handle "Dec" events in "2025" season usually appearing in late 2024? 
+                        # Assume season year for now.
+                        d_str = f"{month} {day} {year_val}"
+                         # Parse
+                        dt = datetime.strptime(d_str, '%b %d %Y')
+                        start_date = dt.strftime('%Y-%m-%d')
+                        # End date
+                        if date_match.group(3):
+                             end_day = date_match.group(3)
+                             dt_end = dt.replace(day=int(end_day)) # simplistic (ignoring month rollover)
+                             end_date = dt_end.strftime('%Y-%m-%d')
+                        else:
+                             end_date = start_date
                     except: pass
-    except: pass
+                    
+                # Location: Look for pattern "City, State"
+                location = "Online" if ('virtual' in text_blob.lower() or 'online' in text_blob.lower()) else "TBA"
+                if location == "TBA":
+                    # Try to find "City, State"
+                    loc_match = re.search(r'([A-Z][a-zA-Z\s\.]+,\s*[A-Z][a-zA-Z\s\.]+)', text_blob)
+                    if loc_match:
+                         location = loc_match.group(1).strip()
+                    
+                mode = 'online' if location == 'Online' else 'in-person'
+                
+                raw = {
+                    'title': title,
+                    'url': href,
+                    'mode': mode,
+                    'source': 'MLH',
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'location': location
+                }
+                events_to_process.append(raw)
+
+        # Unique by URL
+        unique_events = {e['url']: e for e in events_to_process}.values()
+        print(f"  Found {len(unique_events)} potential events. Enriching...")
+
+        # 2. Enrich Data (Parallel)
+        def fetch_enrichment(e):
+            url = e['url']
+            try:
+                # Devpost
+                if 'devpost.com' in url:
+                    return scrape_devpost_details(url)
+                # Devfolio
+                elif 'devfolio.co' in url:
+                    slug = None
+                    if 'devfolio.co/' in url:
+                         slug = url.split('devfolio.co/')[1].split('/')[0]
+                    else:
+                         slug = url.split('//')[1].split('.')[0]
+                    if slug: 
+                        return fetch_devfolio_details_api(slug)
+                # Generic / Custom Site
+                else:
+                    # Visit page to get meta tags or better title/date
+                    sub_r = safe_get(url)
+                    if sub_r:
+                        sub_soup = BeautifulSoup(sub_r.text, 'html.parser')
+                        # Extract meta description
+                        meta_desc = ""
+                        og_desc = sub_soup.select_one('meta[property="og:description"]')
+                        if og_desc: meta_desc = og_desc.get('content')
+                        
+                        # JSON-LD?
+                        json_data = _extract_jsonld_events(sub_soup, url) # Helper exists in file? Or _extract_events_from_structure? 
+                        # _extract_jsonld_events checks for list of events, we assume single?
+                        # Let's inspect title
+                        page_title = sub_soup.title.string if sub_soup.title else ""
+                        
+                        return {'description': meta_desc, 'page_title': page_title}
+            except: pass
+            return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_event = {executor.submit(fetch_enrichment, e): e for e in unique_events}
+            
+            for future in concurrent.futures.as_completed(future_to_event):
+                e = future_to_event[future]
+                result = future.result()
+                
+                if result:
+                    # Merge details
+                    e.update(result)
+                    
+                    # If we got a generic page title and original title was "Unknown", update it
+                    if e['title'] == "Unknown MLH Event" and result.get('page_title'):
+                         e['title'] = result.get('page_title').split('|')[0].strip()
+                    
+                    # Fix devpost participants mapping
+                    if 'participants' in result and not 'participants_count' in e:
+                         e['participants_count'] = result['participants']
+
+                # Save
+                db.save_event(normalizer.normalize(e, 'MLH'))
+                saved += 1
+                
+    except Exception as e: 
+        print(f"  MLH Error: {e}")
+        import traceback
+        traceback.print_exc()
+        
     print(f'  ✓ {saved}')
     return saved
 
@@ -1221,36 +1403,243 @@ def scrape_hackquest():
     print(f'  ✓ {saved}')
     return saved
 
+def fetch_devfolio_details_api(slug):
+    """Fetch hackathon details from Devfolio REST API (fast ~0.5s)."""
+    try:
+        r = requests.get(
+            f'https://api.devfolio.co/api/hackathons/{slug}',
+            headers={'Accept': 'application/json'},
+            timeout=10
+        )
+        if r.status_code != 200:
+            return None
+        
+        data = r.json()
+        hs = data.get('hackathon_setting', {})
+        
+        # Registration end date (priority) - from Schedule tab
+        reg_end = parse_iso_timestamp(hs.get('reg_ends_at'))
+        event_start = parse_iso_timestamp(data.get('starts_at'))
+        event_end = parse_iso_timestamp(data.get('ends_at'))
+        
+        # Mode and location
+        is_online = data.get('is_online', True)
+        mode = 'online' if is_online else 'in-person'
+        city = data.get('city', '')
+        country = data.get('country', '')
+        location = 'Online' if is_online else f"{city}, {country}".strip(', ') or 'In-Person'
+        
+        # Get prizes from separate endpoint
+        prize = 'Prize TBD'
+        try:
+            pr = requests.get(
+                f'https://api.devfolio.co/api/hackathons/{slug}/prizes',
+                headers={'Accept': 'application/json'},
+                timeout=10
+            )
+            if pr.status_code == 200:
+                prizes = pr.json()
+                if prizes:
+                    total = sum(float(p.get('amount', 0)) for p in prizes)
+                    if total > 0:
+                        currency = prizes[0].get('currency', 'USD')
+                        symbol = {'USD': '$', 'INR': '₹', 'EUR': '€', 'GBP': '£'}.get(currency, '$')
+                        prize = f"{symbol}{int(total):,}"
+        except: pass
+        
+        return {
+            'start_date': event_start,
+            'end_date': reg_end or event_end,  # Prefer registration end date
+            'team_size_min': data.get('team_min'),
+            'team_size_max': data.get('team_size'),
+            'mode': mode,
+            'location': location,
+            'participants_count': data.get('participants_count'),
+            'prize': prize,
+            'description': (data.get('desc') or '')[:500]
+        }
+    except Exception as e:
+        print(f'    Devfolio API error: {e}')
+        return None
+
+
 def scrape_devdisplay():
-    print('\n🖥️ DevDisplay (Browser)...')
+    """Scrape DevDisplay hackathons with fast API-based detail fetching."""
+    print('\n🖥️ DevDisplay (API-Enhanced)...')
     saved = 0
     try:
         from playwright.sync_api import sync_playwright
         from bs4 import BeautifulSoup
+        
+        # Step 1: Get listing page (browser required - JS-rendered page)
+        print('  Fetching listing page via browser...')
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             page.goto('https://www.devdisplay.org/hackathons', wait_until='networkidle', timeout=60000)
+            page.wait_for_timeout(2000)
             html = page.content()
             browser.close()
-            
+        
         soup = BeautifulSoup(html, 'html.parser')
+        hackathons_to_scrape = []
         seen = set()
+        
+        # Extract hackathon cards
         for link in soup.find_all('a'):
-            if 'apply now' not in link.get_text(strip=True).lower(): continue
+            if 'apply now' not in link.get_text(strip=True).lower():
+                continue
             href = link.get('href')
-            if not href or href in seen: continue
+            if not href or href in seen:
+                continue
             seen.add(href)
             
-            card = link.find_parent('div').find_parent('div')
+            card = link.find_parent('div')
             if card:
-                title_el = card.find('h2')
-                title = title_el.get_text(strip=True) if title_el else (card.get('id') or '').title()
-                if title:
-                    raw = {'title': title, 'url': href, 'mode': 'online', 'source': 'DevDisplay',
-                           'participants_count': None, 'team_size_max': None}
-                    db.save_event(normalizer.normalize(raw, 'DevDisplay')); saved += 1
-    except Exception as e: print(f'  Error: {e}')
+                card = card.find_parent('div')
+            if not card:
+                continue
+            
+            # Extract title
+            title_el = card.find('h2')
+            title = title_el.get_text(strip=True) if title_el else ''
+            if not title:
+                title = (card.get('id') or '').replace('-', ' ').title()
+            
+            # Extract date from card text (format: "Sep 20 - 21")
+            card_text = card.get_text(separator=' ', strip=True)
+            date_match = re.search(r'([A-Z][a-z]{2})\s+(\d{1,2})\s*[-–]\s*(\d{1,2})', card_text)
+            start_date = None
+            end_date = None
+            if date_match:
+                month = date_match.group(1)
+                day_start = date_match.group(2)
+                day_end = date_match.group(3)
+                from datetime import datetime
+                year = datetime.now().year
+                try:
+                    start_dt = datetime.strptime(f"{month} {day_start} {year}", "%b %d %Y")
+                    end_dt = datetime.strptime(f"{month} {day_end} {year}", "%b %d %Y")
+                    if end_dt < datetime.now():
+                        year += 1
+                        start_dt = datetime.strptime(f"{month} {day_start} {year}", "%b %d %Y")
+                        end_dt = datetime.strptime(f"{month} {day_end} {year}", "%b %d %Y")
+                    start_date = start_dt.strftime('%Y-%m-%d')
+                    end_date = end_dt.strftime('%Y-%m-%d')
+                except: pass
+            
+            # Extract location from card
+            location = 'Online'
+            mode = 'online'
+            if 'India' in card_text or 'Bengaluru' in card_text or 'Mumbai' in card_text or 'Delhi' in card_text:
+                loc_match = re.search(r'([A-Za-z]+,?\s*India)', card_text)
+                if loc_match:
+                    location = loc_match.group(1)
+                    mode = 'in-person'
+            elif 'Online' in card_text:
+                location = 'Online'
+                mode = 'online'
+            
+            # Extract tags
+            tags = []
+            tag_patterns = ['AI/ML', 'Web3', 'Blockchain', 'Open Innovation', 'Fintech', 'Healthcare', 'EdTech']
+            for tag in tag_patterns:
+                if tag.lower() in card_text.lower():
+                    tags.append(tag)
+            
+            hackathons_to_scrape.append({
+                'title': title,
+                'url': href,
+                'start_date': start_date,
+                'end_date': end_date,
+                'location': location,
+                'mode': mode,
+                'tags': tags
+            })
+        
+        print(f'  Found {len(hackathons_to_scrape)} hackathons, fetching details via API...')
+        
+        # Step 2: Fetch details via fast API calls
+        for i, h in enumerate(hackathons_to_scrape):
+            url = h['url']
+            print(f'    [{i+1}/{len(hackathons_to_scrape)}] {h["title"][:40]}...')
+            
+            try:
+                if 'devfolio.co' in url:
+                    # Extract slug from URL (handle both "slug.devfolio.co" and "devfolio.co/slug")
+                    slug = None
+                    # Try subdomain match first
+                    sub_match = re.search(r'https?://([^.]+)\.devfolio\.co', url)
+                    if sub_match and sub_match.group(1) != 'www':
+                        slug = sub_match.group(1)
+                    else:
+                        # Try path match
+                        path_match = re.search(r'devfolio\.co/([^/?]+)', url)
+                        if path_match:
+                            slug = path_match.group(1)
+                            
+                    if slug:
+                        # Enforce canonical URL to prevent duplicates (e.g. devfolio.co/slug -> slug.devfolio.co)
+                        h['url'] = f"https://{slug}.devfolio.co/"
+                        
+                        details = fetch_devfolio_details_api(slug)
+                        if details:
+                            # Merge details (API data takes priority)
+                            if details.get('start_date'): h['start_date'] = details['start_date']
+                            if details.get('end_date'): h['end_date'] = details['end_date']
+                            if details.get('prize'): h['prize'] = details['prize']
+                            if details.get('team_size_min'): h['team_size_min'] = details['team_size_min']
+                            if details.get('team_size_max'): h['team_size_max'] = details['team_size_max']
+                            if details.get('mode'): h['mode'] = details['mode']
+                            if details.get('location'): h['location'] = details['location']
+                            if details.get('participants_count'): h['participants_count'] = details['participants_count']
+                        
+                elif 'unstop.com' in url:
+                    # Extract event ID from end of URL (e.g., "...-154300")
+                    match = re.search(r'-(\d+)$', url)
+                    if match:
+                        details = fetch_unstop_details_api(match.group(1))
+                        if details:
+                            if details.get('end_date'): h['end_date'] = parse_iso_timestamp(details['end_date'])
+                            if details.get('team_size_min'): h['team_size_min'] = details['team_size_min']
+                            if details.get('team_size_max'): h['team_size_max'] = details['team_size_max']
+                            if details.get('registerCount'): h['participants_count'] = details['registerCount']
+                            # Mode and location from region
+                            region = details.get('region', '')
+                            if region and region.lower() == 'online':
+                                h['mode'] = 'online'
+                                h['location'] = 'Online'
+                            elif region and region.lower() == 'offline':
+                                h['mode'] = 'in-person'
+                                city = details.get('city', '')
+                                state = details.get('state', '')
+                                h['location'] = f"{city}, {state}".strip(', ') or 'In-Person'
+            except Exception as e:
+                print(f'      Error: {e}')
+            
+            # Save event
+            raw = {
+                'title': h['title'],
+                'url': h['url'],
+                'start_date': h.get('start_date'),
+                'end_date': h.get('end_date'),
+                'location': h.get('location', 'Online'),
+                'mode': h.get('mode', 'online'),
+                'prize': h.get('prize', 'Prize TBD'),
+                'team_size_min': h.get('team_size_min'),
+                'team_size_max': h.get('team_size_max'),
+                'participants_count': h.get('participants_count'),
+                'tags': h.get('tags', []),
+                'description': h.get('description', '')
+            }
+            db.save_event(normalizer.normalize(raw, 'DevDisplay'))
+            saved += 1
+            
+    except Exception as e:
+        print(f'  Error: {e}')
+        import traceback
+        traceback.print_exc()
+    
     print(f'  ✓ {saved}')
     return saved
 
@@ -1354,11 +1743,14 @@ def scrape_kaggle():
             # Start parsing text
             text = container.get_text(separator=' ', strip=True)
             
-            # Extract Title
-            title = link.get_text(strip=True)
-            if not title or len(title) < 3:
-                h = link.find(['div', 'h1', 'h2', 'span'], class_=True) 
-                if h: title = h.get_text(strip=True)
+            # Extract Title (Clean split to avoid concatenation like "TitlePrize")
+            full_text = link.get_text(separator='|', strip=True)
+            parts = [p.strip() for p in full_text.split('|') if p.strip()]
+            title = parts[0] if parts else "Unknown Kaggle Event"
+            
+            # Remove "Featured" if it appears
+            if title.lower() == 'featured' and len(parts) > 1:
+                title = parts[1]
                 # If still no title, try container header
                 if not title:
                      h = container.find(['h2', 'h3'], class_=not None) # simple check
@@ -1410,7 +1802,7 @@ def main():
     scrapers = [
         scrape_devpost, scrape_devfolio, scrape_unstop,
         scrape_mlh, scrape_superteam,
-        scrape_dorahacks, scrape_techgig, scrape_geeksforgeeks, 
+        scrape_dorahacks, 
         scrape_hackerearth, scrape_hackquest, scrape_devdisplay, scrape_mycareernet,
         scrape_kaggle
     ]
