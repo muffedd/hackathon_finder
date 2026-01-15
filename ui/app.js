@@ -17,6 +17,7 @@ let state = {
     currentFilter: 'all',  // Default to all
     currentSort: 'prize',
     searchQuery: '',
+    locationFilter: '', // Location filter text
     isLoading: true,
     bookmarks: new Set(JSON.parse(localStorage.getItem('bookmarks') || '[]')),
     selectedSources: new Set(), // Will be filled in init
@@ -25,13 +26,22 @@ let state = {
 
 // ... (lines 26-518 unchanged)
 
-function initializeSourceFilter() {
-    // Extract unique sources from hackathons
-    state.allSources = [...new Set(state.hackathons.map(h => h.source))].sort();
+async function initializeSourceFilter() {
+    // Fetch all sources from API (ensures we show all sources, not just loaded ones)
+    try {
+        const response = await fetch(`${API_BASE}/sources`);
+        if (response.ok) {
+            const data = await response.json();
+            state.allSources = data.sources || [];
+        }
+    } catch (e) {
+        // Fallback: extract from loaded events
+        state.allSources = [...new Set(state.hackathons.map(h => h.source).filter(Boolean))].sort();
+    }
 
     console.log('All sources:', state.allSources);
 
-    // Always default to ALL sources on refresh (remove local storage persistence for sources)
+    // Always default to ALL sources on refresh
     state.selectedSources = new Set(state.allSources);
     console.log('Initialized with all sources');
 
@@ -57,7 +67,15 @@ const elements = {
     sourceCheckboxes: document.getElementById('sourceCheckboxes'),
     sourceCount: document.getElementById('sourceCount'),
     selectAllSources: document.getElementById('selectAllSources'),
-    clearAllSources: document.getElementById('clearAllSources')
+    clearAllSources: document.getElementById('clearAllSources'),
+    // Location filter
+    locationInput: document.getElementById('locationInput'),
+    nearbyBtn: document.getElementById('nearbyBtn'),
+    // AI Search
+    aiSearchInput: document.getElementById('aiSearchInput'),
+    aiSearchBtn: document.getElementById('aiSearchBtn'),
+    aiThinking: document.getElementById('aiThinking'),
+    aiResults: document.getElementById('aiResults')
 };
 
 // === Init ===
@@ -67,28 +85,32 @@ async function init() {
     showLoading(true);
 
     try {
-        const response = await fetch(`${API_BASE}/hackathons`);
+        // Fetch first page only (fast initial load)
+        const response = await fetch(`${API_BASE}/hackathons?page=1&page_size=50&sort_by=prize`);
         if (response.ok) {
-            state.hackathons = await response.json();
-            console.log(`Loaded ${state.hackathons.length} hackathons from API`);
+            const data = await response.json();
+            state.hackathons = data.events || [];
+            state.totalEvents = data.total || 0;
+            state.currentPage = data.page || 1;
+            state.totalPages = data.total_pages || 1;
+            console.log(`Loaded ${state.hackathons.length}/${state.totalEvents} hackathons (Page 1)`);
         } else {
             throw new Error('API failed');
         }
     } catch (error) {
-        console.log('API not available, no data to show');
+        console.log('API not available:', error);
         state.hackathons = [];
     }
 
-    // Initialize source filter
-    initializeSourceFilter();
+    // Initialize source filter (fetches all sources from API)
+    await initializeSourceFilter();
 
-    applyFiltersAndSort();
+    // For paginated API, filtered = all loaded events
+    state.filteredHackathons = state.hackathons;
     bindEvents();
 
-    setTimeout(() => {
-        showLoading(false);
-        renderHackathons();
-    }, 500);
+    showLoading(false);
+    renderHackathons();
 }
 
 function bindEvents() {
@@ -112,6 +134,28 @@ function bindEvents() {
     elements.selectAllSources?.addEventListener('click', selectAllSources);
     elements.clearAllSources?.addEventListener('click', clearAllSources);
 
+    // Location filter events
+    elements.locationInput?.addEventListener('input', debounce(handleLocationFilter, 500));
+    elements.locationInput?.addEventListener('keypress', e => { if (e.key === 'Enter') handleLocationFilter(); });
+    elements.nearbyBtn?.addEventListener('click', handleNearbyEvents);
+
+    // AI Search events - get elements directly since they may not be in cache
+    const aiSearchBtn = document.getElementById('aiSearchBtn');
+    const aiSearchInput = document.getElementById('aiSearchInput');
+
+    if (aiSearchBtn) {
+        aiSearchBtn.addEventListener('click', handleAISearch);
+        console.log('AI Search button event bound');
+    } else {
+        console.warn('AI Search button not found');
+    }
+
+    if (aiSearchInput) {
+        aiSearchInput.addEventListener('keypress', e => {
+            if (e.key === 'Enter') handleAISearch();
+        });
+    }
+
     // Infinite scroll
     window.addEventListener('scroll', debounce(handleScroll, 100));
 }
@@ -126,10 +170,10 @@ function handleScroll() {
     // Load more when 300px from bottom
     if (scrollY + windowHeight >= docHeight - 300) {
         const remaining = state.filteredHackathons.length - state.displayedCount;
-        if (remaining > 0) {
-            isLoadingMore = true;
-            renderHackathons(true);
-            isLoadingMore = false;
+        const hasMorePages = state.currentPage < state.totalPages;
+
+        if (remaining > 0 || hasMorePages) {
+            loadMore(); // This is async, will fetch next page if needed
         }
     }
 }
@@ -163,52 +207,77 @@ function calculateStatus(hackathon) {
     }
 }
 
-function applyFiltersAndSort() {
-    let filtered = [...state.hackathons];
+async function fetchFilteredEvents() {
+    /**
+     * HYBRID APPROACH: Fetch events from server with filter params
+     * This ensures filters work correctly across ALL events, not just loaded ones.
+     */
+    showLoading(true);
 
-    if (state.searchQuery) {
-        const q = state.searchQuery.toLowerCase();
-        filtered = filtered.filter(h =>
-            (h.title || '').toLowerCase().includes(q) ||
-            (h.description || '').toLowerCase().includes(q) ||
-            (h.location || '').toLowerCase().includes(q) ||
-            (h.source || '').toLowerCase().includes(q) ||
-            (h.tags || []).some(t => t.toLowerCase().includes(q))
-        );
+    // Build query params based on current filters
+    const params = new URLSearchParams();
+    params.set('page', '1');
+    params.set('page_size', '100'); // Fetch more when filtering
+    params.set('sort_by', state.currentSort === 'deadline' ? 'date' : state.currentSort);
+
+    // Status filter
+    if (state.currentFilter === 'upcoming' || state.currentFilter === 'ongoing') {
+        params.set('status', state.currentFilter);
     }
 
-    // Apply source filter
+    // Mode filter
+    if (state.currentFilter === 'online') {
+        params.set('mode', 'online');
+    } else if (state.currentFilter === 'in-person') {
+        params.set('mode', 'offline');
+    }
+
+    // Search query
+    if (state.searchQuery) {
+        params.set('search', state.searchQuery);
+    }
+
+    // Source filter (if not all selected)
+    if (state.selectedSources.size > 0 && state.selectedSources.size < state.allSources.length) {
+        // API doesn't support multiple sources, so we'll filter client-side for sources
+        // But we still fetch server-filtered data for other filters
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/hackathons?${params.toString()}`);
+        if (response.ok) {
+            const data = await response.json();
+            state.hackathons = data.events || [];
+            state.totalEvents = data.total || 0;
+            state.currentPage = data.page || 1;
+            state.totalPages = data.total_pages || 1;
+            console.log(`Fetched ${state.hackathons.length}/${state.totalEvents} filtered events`);
+        }
+    } catch (e) {
+        console.error('Filter fetch failed:', e);
+    }
+
+    // Apply source filter client-side (API doesn't support multiple sources)
+    let filtered = [...state.hackathons];
     if (state.selectedSources.size > 0 && state.selectedSources.size < state.allSources.length) {
         filtered = filtered.filter(h => state.selectedSources.has(h.source));
     }
 
-    // Apply filters with client-side status calculation
-    switch (state.currentFilter) {
-        case 'upcoming':
-            filtered = filtered.filter(h => calculateStatus(h) === 'upcoming');
-            break;
-        case 'ongoing':
-            filtered = filtered.filter(h => calculateStatus(h) === 'ongoing');
-            break;
-        case 'online':
-            filtered = filtered.filter(h => {
-                const mode = (h.mode || '').toLowerCase();
-                return mode === 'online' || mode.includes('online');
-            });
-            break;
-        case 'in-person':
-            filtered = filtered.filter(h => {
-                const mode = (h.mode || '').toLowerCase();
-                return mode === 'in-person' || mode.includes('in-person') || mode.includes('in person');
-            });
-            break;
-    }
+    state.filteredHackathons = filtered;
+    state.displayedCount = 0;
 
-    switch (state.currentSort) {
-        case 'latest': filtered.sort((a, b) => new Date(b.start_date || 0) - new Date(a.start_date || 0)); break;
-        case 'deadline': filtered.sort((a, b) => new Date(a.start_date || 0) - new Date(b.start_date || 0)); break;
-        case 'prize': filtered.sort((a, b) => (b.prize_pool_numeric || 0) - (a.prize_pool_numeric || 0)); break;
-        case 'title': filtered.sort((a, b) => (a.title || '').localeCompare(b.title || '')); break;
+    showLoading(false);
+    updateResultsCount();
+    renderHackathons();
+}
+
+function applyFiltersAndSort() {
+    // Client-side only filtering for source (since it's multi-select)
+    let filtered = [...state.hackathons];
+
+    // Apply source filter
+    if (state.selectedSources.size > 0 && state.selectedSources.size < state.allSources.length) {
+        filtered = filtered.filter(h => state.selectedSources.has(h.source));
     }
 
     state.filteredHackathons = filtered;
@@ -218,29 +287,217 @@ function applyFiltersAndSort() {
 
 function handleSearch() {
     state.searchQuery = elements.searchInput?.value.trim() || '';
-    applyFiltersAndSort();
-    renderHackathons();
+    fetchFilteredEvents(); // Call API with search param
 }
 
 function handleFilterChange(pill) {
     elements.filterPills.forEach(p => p.classList.remove('active'));
     pill.classList.add('active');
     state.currentFilter = pill.dataset.filter;
-
     console.log(`Filter changed to: ${state.currentFilter}`);
-    console.log(`Total hackathons before filter: ${state.hackathons.length}`);
+    fetchFilteredEvents(); // Call API with filter param
+}
 
-    applyFiltersAndSort();
+// === Location Filter ===
+function handleLocationFilter() {
+    state.locationFilter = elements.locationInput?.value.trim() || '';
+    console.log(`Location filter: ${state.locationFilter}`);
 
-    console.log(`Filtered hackathons: ${state.filteredHackathons.length}`);
-    if (state.currentFilter === 'in-person') {
-        console.log('In-person filter samples:', state.filteredHackathons.slice(0, 5).map(h => ({
-            title: h.title,
-            mode: h.mode
-        })));
+    if (state.locationFilter) {
+        // Filter locally for matching locations
+        const loc = state.locationFilter.toLowerCase();
+        const filtered = state.hackathons.filter(h =>
+            (h.location || '').toLowerCase().includes(loc)
+        );
+        state.filteredHackathons = filtered;
+        state.displayedCount = 0;
+        updateResultsCount();
+        renderHackathons();
+    } else {
+        // Clear location filter - reset to all loaded events
+        state.filteredHackathons = state.hackathons;
+        state.displayedCount = 0;
+        updateResultsCount();
+        renderHackathons();
+    }
+}
+
+async function handleNearbyEvents() {
+    const btn = elements.nearbyBtn;
+    if (!btn) return;
+
+    btn.classList.add('loading');
+
+    if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser');
+        btn.classList.remove('loading');
+        return;
     }
 
-    renderHackathons();
+    try {
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: false,
+                timeout: 10000,
+                maximumAge: 300000 // Cache for 5 minutes
+            });
+        });
+
+        const { latitude, longitude } = position.coords;
+        console.log(`User location: ${latitude}, ${longitude}`);
+
+        // Use Nominatim reverse geocoding (free, no API key needed)
+        const geoResponse = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`,
+            { headers: { 'Accept-Language': 'en' } }
+        );
+
+        if (geoResponse.ok) {
+            const geoData = await geoResponse.json();
+            const address = geoData.address || {};
+            // Get district/city level
+            const district = address.county || address.city || address.state_district ||
+                address.town || address.municipality || address.suburb || '';
+            const city = address.city || address.town || '';
+            const state = address.state || '';
+
+            const locationText = district || city || state || 'Unknown';
+            console.log(`Detected location: ${locationText}`);
+
+            // Update input field and filter
+            if (elements.locationInput) {
+                elements.locationInput.value = locationText;
+            }
+            state.locationFilter = locationText;
+            handleLocationFilter();
+        }
+    } catch (error) {
+        console.error('Geolocation error:', error);
+        if (error.code === 1) {
+            alert('Location access denied. Please enable location permissions or enter location manually.');
+        } else {
+            alert('Could not get your location. Please enter location manually.');
+        }
+    }
+
+    btn.classList.remove('loading');
+}
+
+// === AI Search with Thinking Process ===
+async function handleAISearch() {
+    // Get input directly from DOM in case elements cache is stale
+    const inputEl = document.getElementById('aiSearchInput');
+    const query = inputEl?.value?.trim();
+
+    if (!query) {
+        alert('Please enter a search query (e.g., \'hackathons for beginners in India\').');
+        return;
+    }
+
+    // Get all elements directly from DOM (cache may be stale)
+    const btn = document.getElementById('aiSearchBtn');
+    const thinkingEl = document.getElementById('aiThinking');
+    const resultsEl = document.getElementById('aiResults');
+
+    // Reset and show thinking
+    btn?.classList.add('loading');
+    if (thinkingEl) {
+        thinkingEl.style.display = 'block';
+        thinkingEl.querySelectorAll('.thinking-step').forEach(s => {
+            s.classList.remove('active', 'done');
+        });
+    }
+    if (resultsEl) {
+        resultsEl.style.display = 'none';
+        resultsEl.innerHTML = '';
+    }
+
+    // Animate thinking steps
+    const steps = thinkingEl?.querySelectorAll('.thinking-step');
+    const activateStep = async (index) => {
+        if (steps && steps[index]) {
+            if (index > 0 && steps[index - 1]) {
+                steps[index - 1].classList.remove('active');
+                steps[index - 1].classList.add('done');
+            }
+            steps[index].classList.add('active');
+        }
+        await new Promise(r => setTimeout(r, 600));
+    };
+
+    try {
+        await activateStep(0); // Understanding query
+        await activateStep(1); // Searching hackathons
+
+        const response = await fetch(`${API_BASE}/search/ai?q=${encodeURIComponent(query)}`);
+
+        await activateStep(2); // Analyzing matches
+
+        if (response.ok) {
+            const results = await response.json();
+            await activateStep(3); // Generating recommendations
+
+            // Mark all done
+            steps?.forEach(s => {
+                s.classList.remove('active');
+                s.classList.add('done');
+            });
+
+            // Show results (limit to 4)
+            const topResults = Array.isArray(results) ? results.slice(0, 4) : [];
+            displayAIResults(topResults, query);
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'AI search failed');
+        }
+    } catch (error) {
+        console.error('AI Search error:', error);
+        if (resultsEl) {
+            resultsEl.style.display = 'block';
+            resultsEl.innerHTML = `<div class="ai-error">Error: ${error.message}</div>`;
+        }
+    }
+
+    btn?.classList.remove('loading');
+    setTimeout(() => {
+        if (thinkingEl) thinkingEl.style.display = 'none';
+    }, 1000);
+}
+
+function displayAIResults(results, query) {
+    const container = elements.aiResults;
+    if (!container) return;
+
+    if (results.length === 0) {
+        container.innerHTML = '<div class="ai-no-results">No matching hackathons found. Try a different query.</div>';
+        container.style.display = 'block';
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="ai-results-header">
+            <h3>Top ${results.length} Recommendations</h3>
+            <p class="ai-query-echo">Based on: "${query}"</p>
+        </div>
+        <div class="ai-results-grid">
+            ${results.map(h => `
+                <div class="ai-result-card">
+                    <div class="ai-result-header">
+                        <span class="ai-result-source">${h.source || 'Unknown'}</span>
+                        <span class="ai-result-prize">${h.prize_pool || 'Prize TBD'}</span>
+                    </div>
+                    <h4 class="ai-result-title">${h.title || 'Untitled'}</h4>
+                    ${h.ai_reason ? `<p class="ai-result-reason">${h.ai_reason}</p>` : ''}
+                    <div class="ai-result-meta">
+                        <span>${h.mode || 'TBD'}</span>
+                        <span>${h.location || 'Online'}</span>
+                    </div>
+                    <a href="${h.url || '#'}" target="_blank" class="ai-result-cta">View Details</a>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    container.style.display = 'block';
 }
 
 function handleSortChange(opt) {
@@ -249,8 +506,7 @@ function handleSortChange(opt) {
     state.currentSort = opt.dataset.sort;
     elements.sortBtn.querySelector('span').textContent = `Sort: ${opt.textContent}`;
     elements.sortDropdown?.classList.remove('open');
-    applyFiltersAndSort();
-    renderHackathons();
+    fetchFilteredEvents(); // Call API with sort param
 }
 
 function toggleSortMenu(e) {
@@ -320,13 +576,16 @@ function renderHackathons(append = false) {
 function renderLoadMore() {
     const container = document.getElementById('paginationContainer');
     const remaining = state.filteredHackathons.length - state.displayedCount;
+    const hasMorePages = state.currentPage < state.totalPages;
 
-    if (remaining > 0) {
+    if (remaining > 0 || hasMorePages) {
         container.style.display = 'flex';
+        const totalLoaded = state.hackathons.length;
+        const totalAvailable = state.totalEvents || totalLoaded;
         container.innerHTML = `
             <div class="scroll-indicator">
                 <span class="loading-spinner"></span>
-                Showing ${state.displayedCount} of ${state.filteredHackathons.length} • Scroll for more
+                Showing ${state.displayedCount} of ${totalAvailable} • ${hasMorePages ? 'Scroll for more' : 'All loaded'}
             </div>
         `;
     } else {
@@ -335,7 +594,29 @@ function renderLoadMore() {
     }
 }
 
-function loadMore() {
+async function loadMore() {
+    if (isLoadingMore) return;
+
+    // If we've displayed all loaded events and there are more pages, fetch next page
+    if (state.displayedCount >= state.filteredHackathons.length && state.currentPage < state.totalPages) {
+        isLoadingMore = true;
+        try {
+            const nextPage = state.currentPage + 1;
+            const response = await fetch(`${API_BASE}/hackathons?page=${nextPage}&page_size=50&sort_by=${state.currentSort}`);
+            if (response.ok) {
+                const data = await response.json();
+                const newEvents = data.events || [];
+                state.hackathons = [...state.hackathons, ...newEvents];
+                state.filteredHackathons = [...state.filteredHackathons, ...newEvents];
+                state.currentPage = data.page;
+                console.log(`Loaded page ${nextPage}: ${newEvents.length} more events`);
+            }
+        } catch (e) {
+            console.error('Failed to load more:', e);
+        }
+        isLoadingMore = false;
+    }
+
     renderHackathons(true);
 }
 
@@ -443,6 +724,7 @@ function createCard(h) {
             <!-- Content -->
             <div class="bento-content">
                 <h3 class="bento-title">${h.title || 'Untitled'}</h3>
+                ${h.ai_reason ? `<div class="ai-reason">${h.ai_reason}</div>` : ''}
                 
                 <div class="bento-mode-row">
                     <span class="bento-mode ${mode}">${formatMode(mode)}</span>
@@ -584,33 +866,7 @@ window.resetFilters = resetFilters;
 
 
 // === Source Filter Functions ===
-
-function initializeSourceFilter() {
-    // Extract unique sources from hackathons
-    state.allSources = [...new Set(state.hackathons.map(h => h.source))].sort();
-
-    console.log('All sources:', state.allSources);
-    console.log('Selected sources from localStorage:', [...state.selectedSources]);
-
-    // Validate selectedSources - remove any that don't exist in current data
-    const validSelectedSources = [...state.selectedSources].filter(s => state.allSources.includes(s));
-
-    // If no valid sources selected or localStorage was empty, select all by default
-    if (validSelectedSources.length === 0) {
-        state.selectedSources = new Set(state.allSources);
-        localStorage.setItem('selectedSources', JSON.stringify([...state.selectedSources]));
-        console.log('Initialized with all sources:', [...state.selectedSources]);
-    } else {
-        // Update to only valid sources
-        state.selectedSources = new Set(validSelectedSources);
-        localStorage.setItem('selectedSources', JSON.stringify([...state.selectedSources]));
-        console.log('Using validated sources:', [...state.selectedSources]);
-    }
-
-    // Generate checkboxes
-    renderSourceCheckboxes();
-    updateSourceCount();
-}
+// initializeSourceFilter is defined at the top of the file (async version that fetches from API)
 
 function renderSourceCheckboxes() {
     if (!elements.sourceCheckboxes) return;
@@ -675,5 +931,7 @@ function updateSourceCount() {
     }
 }
 
+// Make handleSourceChange global
+window.handleSourceChange = handleSourceChange;
 // Make handleSourceChange global
 window.handleSourceChange = handleSourceChange;

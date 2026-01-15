@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.5.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.5.1-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-green" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
 </p>
@@ -37,6 +37,7 @@
 | 🔎 **Hybrid Search** | Vector (Semantic) + Keyword (Lexical) for best-in-class relevance. |
 | 📊 **Normalized Data** | Consistent schema across all sources. |
 | 🧠 **AI Semantic Search** | ChromaDB + MiniLM for natural language queries. |
+| 🤖 **AI-Powered Query Parser** | Natural language to structured filters using Gemini Flash. |
 
 ---
 
@@ -54,7 +55,8 @@ playwright install chromium
 # 3. Run the scraper
 python scrape_all.py
 
-# 4. Start the server
+# 4. Start the server (set Gemini API key for AI search)
+export GEMINI_API_KEY="your-api-key"
 python server.py
 
 # 5. Open in browser
@@ -65,6 +67,25 @@ python server.py
 ---
 
 ## 📝 Changelog
+
+### Version 0.5.1 (2026-01-15)
+
+**Major UI Revamp**
+- 🎨 **AI Search Hero**: Purple gradient animated border with "Ask AI" button as primary focus.
+- ✨ **Thinking Steps**: Visual feedback during AI search (Understanding → Searching → Analyzing → Recommending).
+- 🏷️ **AI Reasons**: Each recommendation shows why it matched the query.
+- 📍 **"Explore" Section**: New heading separates AI hero from manual filters.
+
+**Layout Improvements**
+- 🔧 **Inline Search Row**: Sources, Keywords, Location, and Sort now on same row.
+- 📐 **Optimized Widths**: Keyword search (300px max), Location (180px).
+- 📱 **Responsive Layout**: `flex-wrap` prevents overflow on smaller screens.
+- 🐛 **Fixed Duplicate Function**: Removed duplicate `handleAISearch` causing input reading bug.
+
+**AI Search v2 (Query Parser)**
+- 🧠 **Gemini Flash Integration**: Parses natural language queries into structured filters.
+- ⚡ **Minimal Tokens**: ~100 tokens per query for cost-effective AI parsing.
+- 🎯 **Smart Filters**: Extracts mode, tags, prize requirements, location from queries.
 
 ### Version 0.5.0 (2026-01-14)
 

@@ -93,156 +93,202 @@ async def appjs():
 
 
 # === API ===
+# Cache for recalculated events (refreshes every 5 minutes)
+_events_cache = {"data": None, "timestamp": 0}
+CACHE_TTL = 300  # 5 minutes
+
+def get_all_events_cached():
+    """Get all events with caching for repeated requests."""
+    global _events_cache
+    import time
+    now = time.time()
+    
+    if _events_cache["data"] and (now - _events_cache["timestamp"]) < CACHE_TTL:
+        return _events_cache["data"]
+    
+    database = get_db()
+    events, _ = database.query_events(page=1, page_size=10000)
+    
+    events_data = []
+    today = datetime.now().date()
+    
+    for e in events:
+        ed = e.to_dict()
+        try:
+            s_date = datetime.strptime(ed.get('start_date', ''), "%Y-%m-%d").date() if ed.get('start_date') else None
+            e_date = datetime.strptime(ed.get('end_date', ''), "%Y-%m-%d").date() if ed.get('end_date') else s_date
+            if s_date and s_date > today:
+                ed['status'] = 'upcoming'
+            elif s_date and e_date and s_date <= today <= e_date:
+                ed['status'] = 'ongoing'
+            else:
+                ed['status'] = 'ended'
+        except:
+            ed['status'] = 'unknown'
+        events_data.append(ed)
+    
+    _events_cache = {"data": events_data, "timestamp": now}
+    return events_data
+
 @app.get("/api/hackathons", tags=["Hackathons"])
 async def api_hackathons(
-    search: str = Query(default="", description="Search query for title/description"),
-    mode: str = Query(default="", description="Filter by mode (online, in-person)"),
-    location: str = Query(default="", description="Filter by location")
+    page: int = Query(default=1, ge=1, description="Page number"),
+    page_size: int = Query(default=50, ge=1, le=200, description="Items per page"),
+    sort_by: str = Query(default="prize", description="Sort by: prize, date, latest"),
+    status: str = Query(default="", description="Filter by status: upcoming, ongoing, ended"),
+    mode: str = Query(default="", description="Filter by mode: online, offline"),
+    source: str = Query(default="", description="Filter by source platform"),
+    search: str = Query(default="", description="Search query")
 ):
-    """Get ALL hackathons from database with optional filters."""
+    """Get hackathons with pagination and filters."""
+    import time
+    t0 = time.time()
+    
     try:
-        database = get_db()
-
-        # Get ALL events - use large page_size to get everything
-        events, total = database.query_events(
-            search=search if search else None,
-            page=1,
-            page_size=50000  # Return all events
-        )
+        # Get cached events
+        all_events = get_all_events_cached()
         
-        print(f"API: Returning {len(events)} hackathons (total in DB: {total})")
+        # Apply filters
+        result = all_events
         
-        # Filter by mode if specified
+        if status:
+            result = [e for e in result if e.get('status') == status.lower()]
         if mode:
-            events = [e for e in events if e.mode and mode.lower() in e.mode.lower()]
+            result = [e for e in result if e.get('mode') and mode.lower() in e['mode'].lower()]
+        if source:
+            result = [e for e in result if e.get('source') and source.lower() in e['source'].lower()]
+        if search:
+            search_lower = search.lower()
+            result = [e for e in result if 
+                      search_lower in (e.get('title') or '').lower() or
+                      search_lower in (e.get('description') or '').lower() or
+                      any(search_lower in t.lower() for t in (e.get('tags') or []))]
         
-        # Filter by location if specified  
-        if location:
-            events = [e for e in events if e.location and location.lower() in e.location.lower()]
+        # Sort
+        if sort_by == "prize":
+            result.sort(key=lambda x: x.get('prize_pool_numeric') or 0, reverse=True)
+        elif sort_by == "date":
+            result.sort(key=lambda x: x.get('start_date') or '9999', reverse=False)
+        elif sort_by == "latest":
+            result.sort(key=lambda x: x.get('scraped_at') or '', reverse=True)
         
-        # Recalculate status dynamically based on current date
-        result = [recalculate_status(e.to_dict()) for e in events]
-        return result
+        # Paginate
+        total = len(result)
+        start = (page - 1) * page_size
+        end = start + page_size
+        paginated = result[start:end]
+        
+        print(f"API: Page {page}, {len(paginated)}/{total} events in {time.time()-t0:.3f}s")
+        
+        return {
+            "events": paginated,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size
+        }
     except Exception as e:
         print(f"API Error: {e}")
         import traceback
         traceback.print_exc()
-        return []
+        return {"events": [], "total": 0, "page": 1, "page_size": page_size, "total_pages": 0}
+
+@app.get("/api/sources", tags=["Metadata"])
+async def api_sources():
+    """Get all unique source platforms."""
+    all_events = get_all_events_cached()
+    sources = sorted(set(e.get('source') for e in all_events if e.get('source')))
+    return {"sources": sources}
+
+@app.get("/api/locations", tags=["Metadata"])
+async def api_locations():
+    """Get all unique locations (countries/cities)."""
+    all_events = get_all_events_cached()
+    locations = set()
+    for e in all_events:
+        loc = e.get('location')
+        if loc and loc.strip() and loc.lower() not in ['online', 'virtual', 'remote', 'tbd', 'tba']:
+            # Clean and normalize location
+            locations.add(loc.strip())
+    return {"locations": sorted(locations)}
 
 
 @app.get("/api/search/ai", tags=["Search"])
 async def ai_search(
-    q: str = Query(default="", description="Search query for semantic search")
+    q: str = Query(default="", description="Natural language search query")
 ):
-    """Semantic search using AI embeddings (hybrid: vector + keyword)."""
+    """
+    AI-Powered Search using Query Parser architecture.
+    1. Gemini parses query -> Structured filters (minimal tokens)
+    2. Local Python applies filters -> Results
+    """
     query = q.strip()
     if not query:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Missing query parameter 'q'"}
-        )
+        return JSONResponse(status_code=400, content={"error": "Missing query parameter 'q'"})
     
-    # Limit query length for performance
-    if len(query) > 500:
-        query = query[:500]
+    import time
+    t0 = time.time()
     
     try:
-        from utils.embeddings import generate_embedding
-        from database.vector_store import search_similar, get_collection_count
+        from utils.query_parser import parse_user_query, apply_filters_to_events
         
-        # Check if vector store has data
-        count = get_collection_count()
-        if count == 0:
-            return JSONResponse(
-                status_code=503,
-                content={"error": "Vector store is empty. Run vectorize_events.py first."}
-            )
+        # Step 1: Parse query with Gemini (minimal tokens ~100)
+        filters = parse_user_query(query)
+        t1 = time.time()
         
-        # Generate embedding for query (cached via lru_cache)
-        query_embedding = generate_embedding(query)
-        if not query_embedding:
-            return JSONResponse(
-                status_code=500,
-                content={"error": "Failed to generate embedding"}
-            )
+        if "error" in filters:
+            return JSONResponse(status_code=503, content={"error": filters["error"]})
         
-        # 1. Vector Search (Semantic)
-        vector_results = search_similar(query_embedding, top_k=20)
-        
-        # 2. Keyword Search (Lexical)
+        # Step 2: Fetch all upcoming/ongoing events
         database = get_db()
-        keyword_events, _ = database.query_events(search=query, page_size=20)
+        events, _ = database.query_events(page_size=2000)
         
-        # 3. Merge and Rank (Hybrid)
-        rank_map = {}
+        # Convert to dicts and filter by status
+        today = datetime.now().date()
+        active_events = []
+        for e in events:
+            e_dict = recalculate_status(e.to_dict())
+            if e_dict.get("status") in ["upcoming", "ongoing"]:
+                active_events.append(e_dict)
         
-        # Process Vector Results
-        for r in vector_results:
-            rank_map[r['id']] = {
-                'event': None,
-                'id': r['id'],
-                'score': r['score'],
-                'matches': ['semantic']
-            }
+        t2 = time.time()
+        
+        # Step 3: Apply parsed filters locally (instant)
+        filtered = apply_filters_to_events(active_events, filters)
+        t3 = time.time()
+        
+        # Step 4: Sort by prize (highest first) and limit to 4
+        filtered.sort(key=lambda x: x.get("prize_pool_numeric", 0) or 0, reverse=True)
+        results = filtered[:4]  # Limit to 4 recommendations
+        
+        # Add AI reason to each result based on filters
+        for r in results:
+            reasons = []
+            if filters.get("mode"):
+                reasons.append(f"Mode: {filters['mode']}")
+            if filters.get("tags"):
+                matching_tags = [t for t in filters["tags"] if t.lower() in (r.get("title", "")).lower()]
+                if matching_tags:
+                    reasons.append(f"Matches: {', '.join(matching_tags)}")
+            if filters.get("has_prize") and r.get("prize_pool_numeric", 0) > 0:
+                reasons.append(f"Has prize: {r.get('prize_pool', 'Yes')}")
+            if filters.get("location") and filters["location"].lower() in (r.get("location") or "").lower():
+                reasons.append(f"Location: {filters['location']}")
             
-        # Process Keyword Results
-        keyword_base_score = 0.4
-        keyword_boost = 0.2
+            r["ai_reason"] = " | ".join(reasons) if reasons else "Good match for your query"
+            r["ai_filters"] = filters
         
-        for ke in keyword_events:
-            k_dict = recalculate_status(ke.to_dict())
-             
-            if ke.id in rank_map:
-                rank_map[ke.id]['score'] += keyword_boost
-                rank_map[ke.id]['matches'].append('keyword')
-                rank_map[ke.id]['event_dict'] = k_dict
-            else:
-                rank_map[ke.id] = {
-                    'event_dict': k_dict,
-                    'id': ke.id,
-                    'score': keyword_base_score,
-                    'matches': ['keyword']
-                }
-                 
-        # Fetch missing vector event objects
-        for vid, item in rank_map.items():
-            if 'event_dict' not in item:
-                event = database.get_event(vid)
-                if event:
-                    item['event_dict'] = recalculate_status(event.to_dict())
-                else:
-                    item['event_dict'] = None
-
-        # Filter out None events and Sort
-        final_list = []
-        for item in rank_map.values():
-            if item['event_dict']:
-                ed = item['event_dict']
-                ed['similarity_score'] = round(item['score'], 4)
-                ed['match_types'] = item['matches']
-                final_list.append(ed)
-                
-        # Sort by score descending
-        final_list.sort(key=lambda x: x['similarity_score'], reverse=True)
+        print(f"AI Search v2: Parse={t1-t0:.2f}s, Fetch={t2-t1:.2f}s, Filter={t3-t2:.2f}s, Total={t3-t0:.2f}s, Results={len(results)}")
         
-        enriched = final_list[:30]
+        return results
         
-        print(f"AI Search (Hybrid): '{query[:50]}...' -> {len(enriched)} results")
-        return enriched
-        
-    except ImportError as e:
-        return JSONResponse(
-            status_code=503,
-            content={"error": f"AI dependencies not installed: {e}"}
-        )
     except Exception as e:
         print(f"AI Search Error: {e}")
         import traceback
         traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e)}
-        )
+        if "429" in str(e) or "Quota" in str(e):
+            return JSONResponse(status_code=429, content={"error": "AI Quota Exceeded. Please wait 1 minute and try again."})
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/stats", tags=["Stats"])
