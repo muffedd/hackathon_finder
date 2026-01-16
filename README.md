@@ -7,8 +7,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.5.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.6.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-green" alt="Python">
+  <img src="https://img.shields.io/badge/react-19-61dafb" alt="React">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
 </p>
 
@@ -38,6 +39,7 @@
 | 📊 **Normalized Data** | Consistent schema across all sources. |
 | 🧠 **AI Semantic Search** | ChromaDB + MiniLM for natural language queries. |
 | 🤖 **AI-Powered Query Parser** | Natural language to structured filters using Gemini Flash. |
+| ⚛️ **React Frontend** | Modern component-based UI with Vite dev server. |
 
 ---
 
@@ -55,18 +57,42 @@ playwright install chromium
 # 3. Run the scraper
 python scrape_all.py
 
-# 4. Start the server (set Gemini API key for AI search)
+# 4. Start the backend server (set Gemini API key for AI search)
 export GEMINI_API_KEY="your-api-key"
 python server.py
 
-# 5. Open in browser
-# → http://localhost:8000
+# 5. Start React dev server (optional)
+cd ui-react && npm install && npm run dev
+
+# 6. Open in browser
+# → Original UI: http://localhost:8000
+# → React UI: http://localhost:5173
 # → API Docs: http://localhost:8000/docs
 ```
 
 ---
 
 ## 📝 Changelog
+
+### Version 0.6.0 (2026-01-17)
+
+**React Migration**
+- ⚛️ **New React Frontend**: Migrated from vanilla HTML/CSS/JS to Vite + React 19.
+- 📦 **Component Architecture**: 12 modular components (Header, Hero, FilterBar, HackathonCard, etc.).
+- 🪝 **Custom Hooks**: `useHackathons`, `useAISearch`, `useBookmarks`, `useScrollBehavior`.
+- 🔄 **Paginated API Loading**: Fetches all 1347 hackathons (200 per page).
+- 🎨 **Preserved Styling**: Original CSS migrated as `global.css`.
+
+**UI Improvements**
+- 📐 **4-Column Grid**: Fixed responsive grid layout (4 → 3 → 2 → 1 columns).
+- 🏷️ **Card Footer**: Horizontal divider + View Details button + Star bookmark (★/☆).
+- ⭐ **Bookmark Active State**: Only icon color changes (gold), no background change.
+- 📏 **Aligned Filters**: Source dropdown height matches location input (36px).
+- 🔲 **Location Border**: Added visible border to location input field.
+
+**Bug Fixes**
+- 🐛 **Fixed Location Parsing**: Handles stringified JSON objects like `{'icon': 'globe'}`.
+- 🐛 **Fixed Card Classes**: Changed from `card-*` to `bento-*` to match CSS.
 
 ### Version 0.5.2 (2026-01-16)
 
