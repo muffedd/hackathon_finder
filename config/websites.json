@@ -1,0 +1,413 @@
+{
+    "version": "1.0.0",
+    "last_updated": "2026-01-11",
+    "cache_ttl_hours": 6,
+    "websites": {
+        "mlh": {
+            "name": "Major League Hacking",
+            "short_name": "MLH",
+            "url": "https://mlh.io/seasons/2025/events",
+            "method": "browser",
+            "difficulty": "MEDIUM",
+            "has_cloudflare": true,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 200,
+            "selectors": {
+                "event_container": ".event-wrapper, .event, .event-card",
+                "title": ".event-name, .event-title, h3",
+                "date": ".event-date, .date",
+                "location": ".event-location, .location",
+                "url": "a.event-link, a",
+                "image": ".event-logo img"
+            },
+            "pagination": {
+                "type": "none"
+            },
+            "notes": "High-value source. Static HTML with Cloudflare protection."
+        },
+        "devpost": {
+            "name": "Devpost",
+            "short_name": "Devpost",
+            "url": "https://devpost.com/hackathons",
+            "method": "http",
+            "difficulty": "EASY",
+            "has_cloudflare": false,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 100,
+            "selectors": {
+                "event_container": ".hackathon-tile",
+                "title": ".hackathon-title",
+                "date": ".submission-period",
+                "location": ".info-with-icon",
+                "url": "a.block-wrapper-link",
+                "prize": ".prize-amount"
+            },
+            "pagination": {
+                "type": "numbered",
+                "param": "page"
+            },
+            "notes": "Easy to scrape. Check network tab for potential JSON API."
+        },
+        "dorahacks": {
+            "name": "DoraHacks",
+            "short_name": "DoraHacks",
+            "url": "https://dorahacks.io/hackathon",
+            "method": "browser",
+            "difficulty": "HARD",
+            "has_cloudflare": false,
+            "has_recaptcha": true,
+            "requires_auth": false,
+            "estimated_events": 73,
+            "selectors": {
+                "event_container": ".hackathon-card, .hackathon-item, [class*='hackathon']",
+                "title": ".hackathon-name, .hackathon-title, h3",
+                "date": ".hackathon-time, .event-date",
+                "location": ".hackathon-location, .location",
+                "url": "a.hackathon-link, a",
+                "prize": ".prize-pool, .prize"
+            },
+            "pagination": {
+                "type": "load_more",
+                "button_selector": ".load-more-btn"
+            },
+            "notes": "Has reCAPTCHA. Requires CAPTCHA solver extension."
+        },
+        "devfolio": {
+            "name": "Devfolio",
+            "short_name": "Devfolio",
+            "url": "https://devfolio.co/hackathons",
+            "method": "browser",
+            "difficulty": "HARD",
+            "has_cloudflare": true,
+            "has_recaptcha": true,
+            "requires_auth": false,
+            "estimated_events": 41,
+            "selectors": {
+                "event_container": ".hackathon-card, [class*='hackathon']",
+                "title": ".hackathon-title, h3",
+                "date": ".hackathon-dates, .event-date, time",
+                "location": ".hackathon-location, .location",
+                "url": "a"
+            },
+            "pagination": {
+                "type": "infinite_scroll"
+            },
+            "notes": "reCAPTCHA + Cloudflare. Challenge but valuable Indian hackathons."
+        },
+        "hackculture": {
+            "name": "HackCulture",
+            "short_name": "HackCulture",
+            "url": "https://hackculture.io/",
+            "method": "http",
+            "difficulty": "MEDIUM",
+            "has_cloudflare": false,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 50,
+            "selectors": {
+                "event_container": "article, .event-card, .hackathon-card, .card, .listing",
+                "title": "h1, h2, h3, .title, .event-title, .hackathon-title",
+                "date": ".date, .event-date, .hackathon-date, time",
+                "location": ".location, .event-location",
+                "url": "a",
+                "prize": ".prize, .reward, .prize-amount"
+            },
+            "pagination": {
+                "type": "none"
+            },
+            "notes": "Uses JSON-LD fallback when selectors fail."
+        },
+        "hackerearth": {
+            "name": "HackerEarth",
+            "short_name": "HackerEarth",
+            "url": "https://www.hackerearth.com/challenges/",
+            "method": "http",
+            "difficulty": "EASY",
+            "has_cloudflare": false,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 20,
+            "selectors": {
+                "event_container": ".challenge-card-modern, .challenge-card, [class*='challenge']",
+                "title": ".challenge-name, .event-title, h3",
+                "date": ".challenge-date, .date",
+                "location": ".challenge-location, .location",
+                "url": "a.challenge-card-link, a",
+                "prize": ".prize-money, .prize"
+            },
+            "pagination": {
+                "type": "numbered",
+                "param": "page"
+            },
+            "notes": "Has API hints. Simple HTTP may work."
+        },
+        "unstop": {
+            "name": "Unstop (Dare2Compete)",
+            "short_name": "Unstop",
+            "url": "https://unstop.com/hackathons",
+            "method": "browser",
+            "difficulty": "MEDIUM",
+            "has_cloudflare": true,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 50,
+            "selectors": {
+                "event_container": ".opportunity-card, [class*='opportunity']",
+                "title": ".opportunity-title, h3",
+                "date": ".opportunity-date, time",
+                "location": ".opportunity-location, .location",
+                "url": "a.opportunity-link, a",
+                "prize": ".reward-amount, .prize"
+            },
+            "pagination": {
+                "type": "infinite_scroll"
+            },
+            "notes": "Popular Indian platform. Cloudflare protected."
+        },
+        "geeksforgeeks": {
+            "name": "GeeksforGeeks Events",
+            "short_name": "GFG",
+            "url": "https://www.geeksforgeeks.org/events/",
+            "method": "browser",
+            "difficulty": "MEDIUM",
+            "has_cloudflare": false,
+            "has_recaptcha": true,
+            "requires_auth": false,
+            "estimated_events": 6,
+            "selectors": {
+                "event_container": ".event-card, [class*='event']",
+                "title": ".event-title, h3",
+                "date": ".event-date, time",
+                "url": "a.event-link, a"
+            },
+            "pagination": {
+                "type": "none"
+            },
+            "notes": "Has reCAPTCHA. Low event count but valuable."
+        },
+        "kaggle": {
+            "name": "Kaggle Competitions",
+            "short_name": "Kaggle",
+            "url": "https://www.kaggle.com/competitions",
+            "method": "api",
+            "difficulty": "EASY",
+            "has_cloudflare": false,
+            "has_recaptcha": true,
+            "requires_auth": false,
+            "estimated_events": 50,
+            "api_config": {
+                "type": "official",
+                "requires_key": true,
+                "endpoint": "competitions.list",
+                "documentation": "https://github.com/Kaggle/kaggle-api"
+            },
+            "notes": "Use official Kaggle API. Free API key from account."
+        },
+        "mycareernet": {
+            "name": "MyCareernet",
+            "short_name": "MyCareernet",
+            "url": "https://mycareernet.in/mycareernet/contests",
+            "method": "http",
+            "difficulty": "EASY",
+            "has_cloudflare": false,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 10,
+            "selectors": {
+                "event_container": ".contest-item, .contest-card, [class*='contest']",
+                "title": ".contest-name, h3",
+                "date": ".contest-date, time",
+                "url": "a"
+            },
+            "pagination": {
+                "type": "none"
+            },
+            "notes": "Easy HTTP scraping. Small but valuable niche."
+        },
+        "hackquest": {
+            "name": "HackQuest",
+            "short_name": "HackQuest",
+            "url": "https://www.hackquest.io/",
+            "method": "browser",
+            "difficulty": "MEDIUM",
+            "has_cloudflare": false,
+            "has_recaptcha": false,
+            "requires_auth": true,
+            "estimated_events": 148,
+            "selectors": {
+                "event_container": ".hackathon-item, [class*='hackathon']",
+                "title": ".hackathon-title, h3",
+                "date": ".hackathon-date, time",
+                "url": "a"
+            },
+            "pagination": {
+                "type": "infinite_scroll"
+            },
+            "notes": "Requires login. Use saved session cookies."
+        },
+        "superteam": {
+            "name": "Superteam Earn",
+            "short_name": "Superteam",
+            "url": "https://earn.superteam.fun/",
+            "method": "browser",
+            "difficulty": "HARD",
+            "has_cloudflare": true,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 51,
+            "selectors": {
+                "event_container": ".opportunity-card, [class*='opportunity'], [class*='card']",
+                "title": ".opportunity-title, h3",
+                "date": ".deadline, time",
+                "url": "a",
+                "prize": ".bounty-amount, .prize"
+            },
+            "pagination": {
+                "type": "infinite_scroll"
+            },
+            "notes": "Solana ecosystem bounties. Dynamic JS + Cloudflare."
+        },
+        "techgig": {
+            "name": "TechGig Challenges",
+            "short_name": "TechGig",
+            "url": "https://www.techgig.com/challenge",
+            "method": "browser",
+            "difficulty": "HARD",
+            "has_cloudflare": true,
+            "has_recaptcha": true,
+            "requires_auth": true,
+            "estimated_events": 3,
+            "selectors": {
+                "event_container": ".challenge-box, .challenge-card, [class*='challenge']",
+                "title": ".challenge-title, h3",
+                "date": ".challenge-date, time",
+                "url": "a"
+            },
+            "pagination": {
+                "type": "numbered"
+            },
+            "notes": "reCAPTCHA + Cloudflare + Login. Low priority."
+        },
+        "devdisplay": {
+            "name": "DevDisplay",
+            "short_name": "DevDisplay",
+            "url": "https://www.devdisplay.org/hackathons",
+            "method": "browser",
+            "difficulty": "MEDIUM",
+            "has_cloudflare": true,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 0,
+            "selectors": {
+                "event_container": ".hackathon-item, [class*='hackathon'], [class*='card']",
+                "title": ".title, h3",
+                "date": ".date, time",
+                "url": "a"
+            },
+            "pagination": {
+                "type": "none"
+            },
+            "notes": "Dynamic JS. Zero events detected - may have changed."
+        },
+        "devnovate": {
+            "name": "DevNovate",
+            "short_name": "DevNovate",
+            "url": "https://devnovate.co/events",
+            "method": "browser",
+            "difficulty": "EASY",
+            "has_cloudflare": false,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 0,
+            "selectors": {
+                "event_container": ".event-card, [class*='event']",
+                "title": ".event-title, h3",
+                "date": ".event-date, time",
+                "url": "a"
+            },
+            "pagination": {
+                "type": "none"
+            },
+            "notes": "Dynamic JS but no protections. Zero events - verify."
+        },
+        "maximally": {
+            "name": "Maximally",
+            "short_name": "Maximally",
+            "url": "https://maximally.in/codehypothesis",
+            "method": "browser",
+            "difficulty": "EASY",
+            "has_cloudflare": false,
+            "has_recaptcha": false,
+            "requires_auth": false,
+            "estimated_events": 0,
+            "selectors": {
+                "event_container": ".event-item, [class*='event']",
+                "title": ".event-name, h3",
+                "date": ".event-date, time",
+                "url": "a"
+            },
+            "pagination": {
+                "type": "none"
+            },
+            "notes": "Dynamic JS but easy. Limited events."
+        },
+        "contra": {
+            "name": "Contra",
+            "short_name": "Contra",
+            "url": "https://contra.com/community/topic/framerhackathon",
+            "method": "browser",
+            "difficulty": "HARD",
+            "has_cloudflare": true,
+            "has_recaptcha": true,
+            "requires_auth": false,
+            "estimated_events": 0,
+            "selectors": {
+                "event_container": ".topic-post, [class*='post'], [class*='card']",
+                "title": ".post-title, h3",
+                "url": "a"
+            },
+            "pagination": {
+                "type": "infinite_scroll"
+            },
+            "notes": "React + reCAPTCHA + Cloudflare. Low priority."
+        }
+    },
+    "scraping_priority": {
+        "tier_1_high_value": [
+            "mlh",
+            "devpost",
+            "devfolio",
+            "dorahacks",
+            "hackerearth"
+        ],
+        "tier_2_medium": [
+            "unstop",
+            "geeksforgeeks",
+            "mycareernet",
+            "hackquest",
+            "kaggle",
+            "hackculture"
+        ],
+        "tier_3_low": [
+            "superteam",
+            "techgig",
+            "devdisplay",
+            "devnovate",
+            "maximally",
+            "contra"
+        ]
+    },
+    "default_headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5"
+    },
+    "browser_config": {
+        "headless": false,
+        "timeout_ms": 30000,
+        "wait_for_captcha_ms": 60000,
+        "extension_path": "./extensions/captcha-solver"
+    }
+}
