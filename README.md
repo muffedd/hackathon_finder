@@ -5,7 +5,7 @@
 Aggregating 1300+ hackathons from 15+ sources into one unified experience.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.6.1-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-7.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-green" alt="Python">
   <img src="https://img.shields.io/badge/react-19-61dafb" alt="React">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License">
@@ -31,7 +31,8 @@ Aggregating 1300+ hackathons from 15+ sources into one unified experience.
 |---------|-------------|
 | **Multi-Source Aggregation** | Devpost, Devfolio, Unstop, MLH, DoraHacks, Kaggle, and 9 more platforms |
 | **AI Semantic Search** | Natural language queries powered by ChromaDB + MiniLM embeddings |
-| **Query Parser** | Gemini Flash extracts structured filters from conversational input |
+| **Smart shortcuts** | `Ctrl+K` to search, `/` to focus, auto-fill suggestion chips |
+| **Privacy-First** | No login required. Bookmarks and visited history stored locally. |
 | **Hybrid Search** | Combines vector (semantic) and keyword (lexical) search with rank fusion |
 | **Direct API Integration** | Fast data fetching for Unstop and Devfolio via official APIs |
 | **React Frontend** | Modern component-based UI with Vite dev server |
@@ -72,6 +73,24 @@ cd ui-react && npm install && npm run dev
 ---
 
 ## Changelog
+
+### 7.0 "Clean UX" (2026-01-18)
+
+**Aggregation & Trust**
+- **Visited State:** Cards track "visited" status in LocalStorage (purple link style).
+- **Share:** Instant clipboard copy with toast notification for all events.
+- **Privacy:** Clear History button to wipe local data.
+
+**Speed & Accessibility**
+- **Keyboard Shortcuts:** `Ctrl+K` / `/` to search, `Esc` to clear.
+- **Smart Toggle Filters:** Solo/Team and Weekend/Weekday filters.
+- **AI Suggestions:** One-click chips for common queries.
+
+**Visual Polish**
+- **Animations:** Smooth card fade-ins and toast popups.
+- **Layout:** Fixed sticky filter overlap issues.
+
+---
 
 ### 0.6.1 (2026-01-17)
 
