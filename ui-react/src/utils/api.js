@@ -1,5 +1,7 @@
 // API Configuration
-export const API_BASE = '/api';
+// In production (Netlify), set VITE_API_URL environment variable
+// In development, falls back to localhost
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 // Fetch all hackathons with pagination (backend limits to 200 per page)
 export async function fetchHackathons(params = {}) {

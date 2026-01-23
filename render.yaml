@@ -1,0 +1,25 @@
+# Render configuration for HackFind Backend
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: hackfind-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: USE_TIDB
+        value: "true"
+      - key: TIDB_HOST
+        sync: false
+      - key: TIDB_PORT
+        value: "4000"
+      - key: TIDB_USER
+        sync: false
+      - key: TIDB_PASSWORD
+        sync: false
+      - key: TIDB_DATABASE
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
