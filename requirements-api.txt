@@ -1,0 +1,17 @@
+# HackFind API Server - Lightweight Dependencies
+# For Railway/Render deployment (API only, no scraping)
+
+# Web server
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+
+# Database
+PyMySQL>=1.1.0
+cryptography>=41.0.0
+
+# AI Integration (Gemini for query parsing)
+google-generativeai>=0.3.0
+
+# Utilities
+python-dateutil>=2.8.0
+python-dotenv>=1.0.0
